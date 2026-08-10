@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>سوبر ويب — كل أدوات الويب في مكان واحد</title>
+    <meta name="description" content="سوبر ويب: لوحة واحدة تجمع كل أدوات الويب اللي محتاجها — محلل مواقع بالذكاء الاصطناعي، مترجم، مولّد عروض تقديمية، ومستكشف فيديوهات، كلها مجانية وبتتحدث باستمرار.">
+    <link rel="canonical" href="https://krack.pages.dev/">
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="سوبر ويب — كل أدوات الويب في مكان واحد">
+    <meta property="og:description" content="لوحة واحدة تجمع كل أدوات الويب: محلل مواقع، مترجم، مولّد عروض تقديمية، ومستكشف فيديوهات.">
+    <meta property="og:url" content="https://krack.pages.dev/">
+    <meta name="twitter:card" content="summary">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+    <noscript><link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"></noscript>
+
+        <style>
+      /* CSS حرجة مضمّنة: بتمنع ظهور صفحة مكسورة/بلا تنسيق أثناء تحميل style.css بشكل غير-حاجز للعرض */
+      html{background:#FAFBFF;}
+      body{margin:0;box-sizing:border-box;font-family:'Inter',system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background-color:#FAFBFF;color:#14122B;min-height:100vh;display:flex;flex-direction:column;}
+    </style>
+    <link rel="preload" href="/style.min.css" as="style" onload="this.rel='stylesheet'">
+    <noscript><link rel="stylesheet" href="/style.min.css"></noscript>
+
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      "name": "سوبر ويب",
+      "alternateName": "Super Web",
+      "url": "https://krack.pages.dev/",
+      "description": "لوحة واحدة تجمع كل أدوات الويب اللي محتاجها: محلل مواقع بالذكاء الاصطناعي، مترجم، مولّد عروض تقديمية، ومستكشف فيديوهات.",
+      "inLanguage": "ar"
+    }
+    </script>
+</head>
+<body class="app-body">
+
+    <!-- طبقة تعتيم للموبايل لما الشريط الجانبي يفتح -->
+    <div id="sidebar-overlay" class="sidebar-overlay"></div>
+
+    <div class="app-shell">
+
+        <!-- ==================== الشريط الجانبي ==================== -->
+        <aside id="app-sidebar" class="app-sidebar">
+            <div class="sidebar-brand">
+                <span class="brand-mark">SW</span>
+                <div class="brand-text">
+                    <span class="brand-name">سوبر ويب</span>
+                </div>
+            </div>
+
+            <nav class="sidebar-nav">
+                <a href="/index.html" class="sidebar-link is-active">
+                    <span class="sidebar-link-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v9a1 1 0 0 0 1 1H9a1 1 0 0 0 1-1v-4a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v4a1 1 0 0 0 1 1h2.5a1 1 0 0 0 1-1v-9"/></svg>
+                    </span>
+                    <span class="sidebar-link-text">الرئيسية</span>
+                </a>
+
+                <div class="sidebar-section-label">الأدوات</div>
+                <div id="sidebar-tools-list" class="sidebar-tools-list">
+                    <!-- بتتملى تلقائياً من tools-config.js -->
+                </div>
+            </nav>
+
+            <div id="sidebar-user-box" class="sidebar-user-box">
+                <!-- بتتملى تلقائياً حسب حالة تسجيل الدخول -->
+            </div>
+        </aside>
+
+        <!-- ==================== المحتوى الرئيسي ==================== -->
+        <div class="app-main">
+
+            <header class="app-topbar">
+                <button id="mobile-menu-toggle" class="mobile-menu-toggle" aria-label="فتح القائمة">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3.5 6.5h17M3.5 12h17M3.5 17.5h17"/></svg>
+                </button>
+                <span class="topbar-path">~ / الرئيسية</span>
+            </header>
+
+            <main class="app-content">
+
+                <!-- ============ قسم الترحيب ============ -->
+                <section class="hero-welcome">
+                    <span class="hero-eyebrow">$ status: كل الأدوات جاهزة للتشغيل</span>
+                    <h1 class="hero-title">أهلاً بيك في <span class="hero-title-accent">سوبر ويب</span></h1>
+                    <p class="hero-subtitle">
+                        كل أدوات الويب في مكان واحد — مساحة واحدة تجمع كل الأدوات اللي بتشتغل عليها،
+                        من فحص المواقع للترجمة لإنشاء المحتوى، وكل أداة جديدة بتنضم للوحة دي تلقائياً.
+                    </p>
+                </section>
+
+                <!-- ============ شبكة الأدوات ============ -->
+                <section class="tools-section">
+                    <div class="tools-section-header">
+                        <h2>الأدوات المتاحة</h2>
+                        <span class="tools-count-badge" id="tools-count-badge"></span>
+                    </div>
+
+                    <div id="tools-grid" class="tools-grid">
+                        <!-- بتتملى تلقائياً من tools-config.js -->
+                    </div>
+                </section>
+
+            </main>
+
+            <footer class="app-footer">
+                <span>© <span id="footer-year"></span> سوبر ويب</span>
+                <div class="app-footer-links">
+                    <a href="/privacy.html">سياسة الخصوصية</a>
+                    <a href="/terms.html">الشروط والأحكام</a>
+                </div>
+            </footer>
+        </div>
+    </div>
+
+    <script src="/tools-config.js" defer></script>
+    <script src="/app.js" defer></script>
+    <script>document.getElementById('footer-year').textContent = new Date().getFullYear();</script>
+
+</body>
+</html>

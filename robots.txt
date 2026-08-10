@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+
+# صفحات تسجيل الدخول/الحساب مش محتاجة تتفهرس (فيها noindex في الميتا برضو)
+Disallow: /login.html
+Disallow: /register.html
+Disallow: /forgot-password.html
+
+Sitemap: https://krack.pages.dev/sitemap.xml

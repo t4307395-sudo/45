@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>محلل المواقع بالذكاء الاصطناعي — سوبر ويب</title>
+    <meta name="description" content="حط رابط موقعك واحصل مجاناً على تقرير سرعة وأمان وأرشفة (SEO) كامل، مع حلول جاهزة ومولّدة بالذكاء الاصطناعي تقدر تنسخها مباشرة.">
+    <link rel="canonical" href="https://krack.pages.dev/tools/site-analyzer/">
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="محلل المواقع بالذكاء الاصطناعي — سوبر ويب">
+    <meta property="og:description" content="فحص مجاني لسرعة وأمان وأرشفة أي موقع، مع توصيات جاهزة من الذكاء الاصطناعي.">
+    <meta property="og:url" content="https://krack.pages.dev/tools/site-analyzer/">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+    <noscript><link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"></noscript>
+
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+
+        <style>
+      /* CSS حرجة مضمّنة: بتمنع ظهور صفحة مكسورة/بلا تنسيق أثناء تحميل style.css بشكل غير-حاجز للعرض */
+      html{background:#FAFBFF;}
+      body{margin:0;box-sizing:border-box;font-family:'Inter',system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background-color:#FAFBFF;color:#14122B;min-height:100vh;display:flex;flex-direction:column;}
+    </style>
+    <link rel="preload" href="/style.min.css" as="style" onload="this.rel='stylesheet'">
+    <noscript><link rel="stylesheet" href="/style.min.css"></noscript>
+
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "محلل المواقع — سوبر ويب",
+      "applicationCategory": "SEO Tool",
+      "operatingSystem": "Web",
+      "url": "https://krack.pages.dev/tools/site-analyzer/",
+      "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+      "inLanguage": "ar"
+    }
+    </script>
+</head>
+<body class="app-body">
+
+    <div id="sidebar-overlay" class="sidebar-overlay"></div>
+
+    <!-- ============ نافذة منبثقة: تظهر لما المستخدم يخلّص فحوصاته المجانية اليوم ============ -->
+    <div id="pro-limit-modal-overlay" class="pro-limit-modal-overlay" style="display:none;">
+        <div class="pro-limit-modal">
+            <button type="button" id="pro-limit-modal-close" class="pro-limit-modal-close" aria-label="إغلاق">✕</button>
+            <p class="pro-limit-modal-note">خلّصت فحوصاتك المجانية النهاردة 👋 اشترك في الباقة الاحترافية وافحص من غير حدود</p>
+            <div class="pro-plan-header">
+                <h3>⚡ الباقة الاحترافية</h3>
+                <div class="pro-plan-price">
+                    <span class="pro-plan-price-old">7$</span>
+                    <span class="pro-plan-price-new">3.5$ / شهرياً</span>
+                </div>
+            </div>
+            <ul class="pro-plan-features">
+                <li>فحوصات غير محدودة، من غير انتظار</li>
+                <li>اربط موقعك الخاص وتابعه بشكل دوري تلقائي</li>
+                <li>تقارير أسبوعية على إيميلك</li>
+                <li>تنبيه فوري لحظة حدوث هبوط أو مشكلة في أداء موقعك</li>
+            </ul>
+            <form id="pro-subscribe-modal-form" class="pro-subscribe-form">
+                <input type="email" id="pro-subscribe-modal-email" class="analyzer-input" placeholder="بريدك الإلكتروني" required>
+                <button type="submit" id="pro-subscribe-modal-btn" class="btn-primary">اشترك الآن</button>
+            </form>
+            <p id="pro-subscribe-modal-msg" class="pro-subscribe-msg"></p>
+        </div>
+    </div>
+
+    <div class="app-shell">
+
+        <aside id="app-sidebar" class="app-sidebar">
+            <div class="sidebar-brand">
+                <span class="brand-mark">SW</span>
+                <div class="brand-text">
+                    <span class="brand-name">سوبر ويب</span>
+                </div>
+            </div>
+
+            <nav class="sidebar-nav">
+                <a href="/index.html" class="sidebar-link">
+                    <span class="sidebar-link-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v9a1 1 0 0 0 1 1H9a1 1 0 0 0 1-1v-4a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v4a1 1 0 0 0 1 1h2.5a1 1 0 0 0 1-1v-9"/></svg>
+                    </span>
+                    <span class="sidebar-link-text">الرئيسية</span>
+                </a>
+
+                <div class="sidebar-section-label">الأدوات</div>
+                <div id="sidebar-tools-list" class="sidebar-tools-list"></div>
+            </nav>
+
+            <div id="sidebar-user-box" class="sidebar-user-box"></div>
+        </aside>
+
+        <div class="app-main">
+
+            <header class="app-topbar">
+                <button id="mobile-menu-toggle" class="mobile-menu-toggle" aria-label="فتح القائمة">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3.5 6.5h17M3.5 12h17M3.5 17.5h17"/></svg>
+                </button>
+                <span class="topbar-path">~ / tools/site-analyzer</span>
+            </header>
+
+            <main class="app-content">
+
+                <section class="hero-welcome">
+                    <span class="hero-eyebrow">$ tool: site-analyzer</span>
+                    <h1 class="hero-title">محلل <span class="hero-title-accent">المواقع</span></h1>
+                    <p class="hero-subtitle">
+                        حط أي رابط واحصل على تقرير سرعة وأمان وأرشفة، مع توصيات جاهزة من الذكاء الاصطناعي.
+                    </p>
+                </section>
+
+                <!-- ============ فورم الفحص (يظهر بس لو مسجل دخول) ============ -->
+                <section class="analyzer-input-section" id="analyzer-input-section">
+                    <form id="analyze-form" class="analyzer-form">
+                        <input
+                            type="url"
+                            id="analyze-url"
+                            class="analyzer-input"
+                            placeholder="https://example.com"
+                            required
+                        >
+                        <button type="submit" id="analyze-btn" class="btn-primary analyzer-submit">
+                            ابدأ الفحص
+                        </button>
+                        <span id="cooldown-timer" class="cooldown-timer"></span>
+                    </form>
+                    <p class="analyzer-limit-note">3 فحوصات مجانية يومياً، بفاصل 7 دقائق بين كل فحص والتاني.</p>
+                </section>
+
+                <!-- ============ رسالة تسجيل الدخول الإجباري ============ -->
+                <section class="login-required-box" id="login-required-box" style="display:none;">
+                    <p>لازم تسجّل دخول الأول عشان تقدر تستخدم الأداة</p>
+                    <a href="/login.html" class="btn-primary">تسجيل الدخول</a>
+                </section>
+
+                <!-- ============ حالة التحميل ============ -->
+                <div id="analyze-loading" class="analyzer-loading" style="display:none;">
+                    <div class="loading-spinner"></div>
+                    <span id="loading-step-text">بنفحص الموقع...</span>
+                </div>
+
+                <!-- ============ النتائج ============ -->
+                <section id="analyze-results" class="analyzer-results" style="display:none;">
+
+                    <div class="results-top-bar">
+                        <div id="comparison-badge" class="comparison-badge" style="display:none;"></div>
+                        <button id="print-report-btn" class="print-btn">🖨️ تصدير PDF / طباعة</button>
+                    </div>
+
+                    <!-- ملخص عام + دوائر النتائج -->
+                    <div class="report-overview">
+
+                        <div class="device-tabs" id="device-tabs">
+                            <button class="device-tab is-active" data-device="mobile">📱 الموبايل</button>
+                            <button class="device-tab" data-device="desktop">💻 الديسكتوب</button>
+                        </div>
+
+                        <div class="device-panel" id="device-panel-mobile">
+                            <div class="device-content">
+                                <div class="score-gauges" id="score-gauges-mobile"></div>
+                                <div class="device-screenshot-wrap">
+                                    <img id="screenshot-mobile" class="device-screenshot device-screenshot--mobile" alt="لقطة شاشة للموقع على الموبايل">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="device-panel" id="device-panel-desktop" style="display:none;">
+                            <div class="device-content">
+                                <div class="score-gauges" id="score-gauges-desktop"></div>
+                                <div class="device-screenshot-wrap">
+                                    <img id="screenshot-desktop" class="device-screenshot device-screenshot--desktop" alt="لقطة شاشة للموقع على الديسكتوب">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="crux-box" class="crux-box"></div>
+
+                        <div class="report-summary-strip" id="report-summary-strip">
+                            <!-- بيتولد ديناميكياً -->
+                        </div>
+                    </div>
+
+                    <!-- الحلول المقترحة -->
+                    <div class="result-block">
+                        <div class="fixes-header">
+                            <h3 id="fixes-count">الحلول المقترحة <span id="key-indicator" class="key-indicator"></span></h3>
+                            <div class="fixes-filter" id="fixes-filter">
+                                <button class="filter-chip is-active" data-filter="all">الكل</button>
+                                <button class="filter-chip" data-filter="critical">حرجة</button>
+                                <button class="filter-chip" data-filter="high">مهمة</button>
+                                <button class="filter-chip" data-filter="medium">بسيطة</button>
+                            </div>
+                        </div>
+                        <div id="result-fixes" class="fixes-list"></div>
+                    </div>
+
+                    <div class="result-block">
+                        <h3>وصف Meta مقترح <button class="copy-btn" data-copy-target="result-meta">نسخ</button></h3>
+                        <code id="result-meta" class="result-code"></code>
+                    </div>
+
+                    <div class="result-block">
+                        <h3>كود Schema Markup جاهز <button class="copy-btn" data-copy-target="result-schema">نسخ</button></h3>
+                        <pre id="result-schema" class="result-code result-code--block"></pre>
+                    </div>
+
+                    <div class="result-block result-block--save">
+                        <div id="drive-not-connected">
+                            <p>عايز تحتفظ بتاريخ فحوصاتك؟</p>
+                            <button id="connect-drive-btn" class="btn-primary">اربط Drive بتاعك</button>
+                        </div>
+                        <div id="drive-connected" style="display:none;">
+                            <button id="save-report-btn" class="btn-primary">احفظ النتيجة في Drive</button>
+                            <a id="sheet-link" href="#" target="_blank" style="display:none;">افتح سجل الفحوصات ←</a>
+                        </div>
+                    </div>
+
+                </section>
+
+                <!-- ============ الباقة الاحترافية (بتظهر تحت التقرير بعد أول فحص) ============ -->
+                <section id="pro-plan-card" class="pro-plan-card" style="display:none;">
+                    <div class="pro-plan-header">
+                        <h3>⚡ الباقة الاحترافية</h3>
+                        <div class="pro-plan-price">
+                            <span class="pro-plan-price-old">7$</span>
+                            <span class="pro-plan-price-new">3.5$ / شهرياً</span>
+                        </div>
+                    </div>
+                    <ul class="pro-plan-features">
+                        <li>فحوصات غير محدودة، من غير انتظار</li>
+                        <li>اربط موقعك الخاص وتابعه بشكل دوري تلقائي</li>
+                        <li>تقارير أسبوعية على إيميلك</li>
+                        <li>تنبيه فوري لحظة حدوث هبوط أو مشكلة في أداء موقعك</li>
+                    </ul>
+                    <form id="pro-subscribe-form" class="pro-subscribe-form">
+                        <input type="email" id="pro-subscribe-email" class="analyzer-input" placeholder="بريدك الإلكتروني" required>
+                        <button type="submit" id="pro-subscribe-btn" class="btn-primary">اشترك الآن</button>
+                    </form>
+                    <p id="pro-subscribe-msg" class="pro-subscribe-msg"></p>
+                </section>
+
+            </main>
+
+            <footer class="app-footer">
+                <span>© <span id="footer-year"></span> سوبر ويب</span>
+                <div class="app-footer-links">
+                    <a href="/privacy.html">سياسة الخصوصية</a>
+                    <a href="/terms.html">الشروط والأحكام</a>
+                </div>
+            </footer>
+        </div>
+    </div>
+
+    <script src="/tools-config.js" defer></script>
+    <script src="/app.js" defer></script>
+    <script src="site-analyzer.js" defer></script>
+    <script>document.getElementById('footer-year').textContent = new Date().getFullYear();</script>
+
+</body>
+</html>
