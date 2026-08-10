@@ -20,29 +20,16 @@ function icon(name) {
 }
 
 // ------------------------------------------------------------------
-// 0. جلب بيانات الأدوات (من ملفات tool.json جوه tools/*) مرة واحدة بس
+// 1. بناء الشريط الجانبي وشبكة الأدوات من tools-config.js
 // ------------------------------------------------------------------
-let toolsCache = null;
-
-async function getTools() {
-    if (toolsCache) return toolsCache;
-    if (typeof loadTools !== 'function') return [];
-    toolsCache = await loadTools();
-    return toolsCache;
-}
-
-// ------------------------------------------------------------------
-// 1. بناء الشريط الجانبي وشبكة الأدوات من الأدوات المكتشفة تلقائياً
-// ------------------------------------------------------------------
-async function renderSidebarLinks() {
+function renderSidebarLinks() {
     const list = document.getElementById('sidebar-tools-list');
-    if (!list) return;
+    if (!list || typeof TOOLS === 'undefined') return;
 
-    const tools = await getTools();
-    const currentPath = window.location.pathname;
+    const currentPage = window.location.pathname.split('/').pop() || 'index.html';
 
-    list.innerHTML = tools.map(tool => {
-        const isActive = currentPath === tool.route;
+    list.innerHTML = TOOLS.map(tool => {
+        const isActive = currentPage === tool.route;
         const isSoon = tool.status !== 'active';
         const href = isSoon ? '#' : tool.route;
 
@@ -58,13 +45,11 @@ async function renderSidebarLinks() {
     }).join('');
 }
 
-async function renderToolsGrid() {
+function renderToolsGrid() {
     const grid = document.getElementById('tools-grid');
-    if (!grid) return;
+    if (!grid || typeof TOOLS === 'undefined') return;
 
-    const tools = await getTools();
-
-    grid.innerHTML = tools.map(tool => {
+    grid.innerHTML = TOOLS.map(tool => {
         const isSoon = tool.status !== 'active';
         const cardTag = isSoon ? 'div' : 'a';
         const hrefAttr = isSoon ? '' : `href="${tool.route}"`;
@@ -75,21 +60,12 @@ async function renderToolsGrid() {
                 <h3 class="tool-card-title">${tool.name}</h3>
                 <p class="tool-card-desc">${tool.description}</p>
                 <div class="tool-card-footer">
-                    <code class="tool-route">~/${tool.id}</code>
+                    <code class="tool-route">~/${tool.route}</code>
                     ${isSoon ? '<span class="soon-badge">' + icon('clock') + ' قريباً</span>' : '<span class="tool-go">افتح ←</span>'}
                 </div>
             </${cardTag}>
         `;
     }).join('');
-}
-
-async function renderToolsCount() {
-    const badge = document.getElementById('tools-count-badge');
-    if (!badge) return;
-
-    const tools = await getTools();
-    const activeCount = tools.filter(t => t.status === 'active').length;
-    badge.textContent = `${activeCount} / ${tools.length} شغّالة`;
 }
 
 // ------------------------------------------------------------------
@@ -129,7 +105,7 @@ function renderUserSection() {
         });
     } else {
         box.innerHTML = `
-            <a href="/login.html" class="sidebar-login-btn">تسجيل الدخول</a>
+            <a href="login.html" class="sidebar-login-btn">تسجيل الدخول</a>
         `;
     }
 }
@@ -156,12 +132,17 @@ function setupMobileToggle() {
     overlay.addEventListener('click', closeSidebar);
 }
 
-document.addEventListener('DOMContentLoaded', async () => {
-    await Promise.all([
-        renderSidebarLinks(),
-        renderToolsGrid(),
-        renderToolsCount()
-    ]);
+function renderToolsCount() {
+    const badge = document.getElementById('tools-count-badge');
+    if (!badge || typeof TOOLS === 'undefined') return;
+    const activeCount = TOOLS.filter(t => t.status === 'active').length;
+    badge.textContent = `${activeCount} / ${TOOLS.length} شغّالة`;
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    renderSidebarLinks();
+    renderToolsGrid();
+    renderToolsCount();
     renderUserSection();
     setupMobileToggle();
 });

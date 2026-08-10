@@ -2,51 +2,53 @@
  * ============================================================================
  * سجل الأدوات (Tools Registry) — سوبر ويب
  * ============================================================================
- * كل أداة ليها مجلد خاص بيها جوه tools/ فيه كل ملفاتها (index.html, الأكواد،
- * وأي حاجة تانية محتاجاها الأداة)، بالإضافة لملف tool.json صغير فيه بيانات
- * الكارت (الاسم، الوصف، الأيقونة، الحالة).
+ * ده المصدر الوحيد اللي بيتحكم في الشريط الجانبي وشبكة الأدوات في الصفحة
+ * الرئيسية. عشان تضيف أداة جديدة، اعمل خطوتين بس:
  *
- * عشان تضيف أداة جديدة:
- *   1. اعمل مجلد جديد جوه tools/ باسم الأداة (مثلاً: tools/translator/)
- *   2. حط جوه المجلد كل ملفات الأداة، بما فيها index.html كصفحة رئيسية للأداة
- *   3. اعمل ملف tool.json جوه نفس المجلد بنفس شكل tools/site-analyzer/tool.json:
- *        {
- *          "id": "translator",
- *          "name": "المترجم",
- *          "description": "وصف قصير للأداة",
- *          "icon": "languages",   // اسم أيقونة موجودة في app.js، أو سيبها فاضية
- *          "status": "active"     // أو "coming-soon" لو لسه مش جاهزة
- *        }
- *   4. ضيف اسم المجلد في المصفوفة TOOL_FOLDERS تحت
+ *   1. اعمل ملف الصفحة بتاعها (مثلاً: site-analyzer.html) في نفس مجلد المشروع
+ *   2. ضيف عنصر جديد في المصفوفة TOOLS تحت، بنفس الشكل اللي شايفه
  *
- * وبس — الكارت هيظهر تلقائياً في الشريط الجانبي وشبكة الأدوات بالصفحة
- * الرئيسية بالاسم والوصف والأيقونة اللي حطيتها في tool.json، من غير ما
- * تلمس أي كود تاني خالص.
+ * أول ما تحفظ ده وترفعه، الأداة هتظهر تلقائياً في الشريط الجانبي وفي شبكة
+ * الأدوات بالصفحة الرئيسية — من غير ما تلمس أي كود تاني خالص.
  * ============================================================================
  */
 
-const TOOL_FOLDERS = ['site-analyzer'];
+const TOOLS = [
+    {
+        id: 'site-analyzer',
+        name: 'محلل المواقع',
+        description: 'افحص أي رابط واحصل على تقرير سرعة وأمان وأرشفة، مع حلول جاهزة تنسخها مباشرة.',
+        route: 'site-analyzer.html',
+        icon: 'scan',
+        status: 'active'
+    },
+    {
+        id: 'translator',
+        name: 'المترجم',
+        description: 'ترجمة فورية بين أكتر من 100 لغة، مدعومة بالذكاء الاصطناعي مباشرة من المتصفح.',
+        route: 'translator.html',
+        icon: 'languages',
+        status: 'coming-soon'
+    },
+    {
+        id: 'slides-generator',
+        name: 'مولّد العروض التقديمية',
+        description: 'اكتب موضوعك بس، والذكاء الاصطناعي يبني لك عرض تقديمي كامل على درايف بتاعك.',
+        route: 'slides-generator.html',
+        icon: 'presentation',
+        status: 'coming-soon'
+    },
+    {
+        id: 'video-search',
+        name: 'مستكشف الفيديوهات',
+        description: 'محرك بحث فيديوهات مخصص، يجيبلك أفضل النتائج بموضوعك من يوتيوب مباشرة.',
+        route: 'video-search.html',
+        icon: 'video',
+        status: 'coming-soon'
+    }
+];
 
-/**
- * بيجيب بيانات كل أداة من ملف tool.json بتاعها، ويبني منها مصفوفة الأدوات
- * الكاملة (بما فيها مسار الصفحة route). بيستخدم مسار مطلق (يبدأ بـ /) عشان
- * يشتغل صح سواء اتنادى من الصفحة الرئيسية أو من جوه صفحة أداة تانية.
- */
-async function loadTools() {
-    const results = await Promise.all(TOOL_FOLDERS.map(async (folder) => {
-        try {
-            const res = await fetch(`/tools/${folder}/tool.json`);
-            if (!res.ok) return null;
-            const meta = await res.json();
-            return { ...meta, route: `/tools/${folder}/index.html` };
-        } catch {
-            return null;
-        }
-    }));
-
-    return results.filter(Boolean);
-}
-
+// تصدير المصفوفة عشان أي ملف تاني يقدر يستخدمها
 if (typeof window !== 'undefined') {
-    window.loadTools = loadTools;
+    window.TOOLS = TOOLS;
 }

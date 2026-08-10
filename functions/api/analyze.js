@@ -49,23 +49,19 @@ export async function onRequestPost(context) {
         });
     }
 
-    // 2) تحقق من الحد اليومي (3 فحوصات) + فترة الانتظار (7 دقايق بين كل فحص والتاني)
+    // 2) تحقق من الحد اليومي (3 فحوصات فقط، الكاش مبيتحسبش منها)
     const limitCheck = await checkAndIncrementLimit(env, identifier);
     if (!limitCheck.allowed) {
-        const limitResponseBody = { retryAfterSeconds: limitCheck.retryAfterSeconds || null, reason: limitCheck.reason };
-        if (limitCheck.reason === 'cooldown') {
-            const mins = Math.ceil(limitCheck.retryAfterSeconds / 60);
-            limitResponseBody.error = `استنى ${mins} دقيقة قبل ما تعمل فحص تاني. لو عايز فحوصات غير محدودة من غير انتظار، اشترك في الباقة الاحترافية.`;
-        } else {
-            limitResponseBody.error = `وصلت للحد الأقصى (3 فحوصات في اليوم). حاول تاني بكرة، أو اشترك في الباقة الاحترافية لفحوصات غير محدودة.`;
-        }
-        return new Response(JSON.stringify(limitResponseBody), { status: 429, headers: { 'Content-Type': 'application/json' } });
+        return jsonError(
+            `وصلت للحد الأقصى (3 فحوصات في اليوم). حاول تاني بكرة، أو جرب رابط فحصته قبل كده هيرجع من الكاش فوراً.`,
+            429
+        );
     }
 
     const apiKey = env.EXT_TOKEN_MAIN;
 
     try {
-        // تشغيل كل الفحوصات بالتوازي: موبايل + ديسكتوب + أمان + تحليل HTML + بيانات المستخدمين الحقيقية (CrUX)
+        // تشغيل كل الفحوصات بالتوازي: موبايل + ديسكتوب + أمان + تحليل HTML + بيانات مستخدمين حقيقيين
         const [mobileResult, desktopResult, safeBrowsingResult, pageContent, cruxResult] = await Promise.allSettled([
             fetchPageSpeed(url, apiKey, 'mobile'),
             fetchPageSpeed(url, apiKey, 'desktop'),
@@ -78,7 +74,7 @@ export async function onRequestPost(context) {
         const desktop = desktopResult.status === 'fulfilled' ? desktopResult.value : null;
         const safety = safeBrowsingResult.status === 'fulfilled' ? safeBrowsingResult.value : null;
         const seo = pageContent.status === 'fulfilled' ? pageContent.value : null;
-        const crux = cruxResult.status === 'fulfilled' ? cruxResult.value : null;
+        const realUserData = cruxResult.status === 'fulfilled' ? cruxResult.value : null;
 
         // دمج مشاكل الموبايل والديسكتوب مع بعض (كل مشكلة موسومة بالجهاز)
         const allAudits = [
@@ -86,7 +82,7 @@ export async function onRequestPost(context) {
             ...(desktop?.actionableAudits || []).map(a => ({ ...a, device: 'desktop' }))
         ];
 
-        const aiRecommendations = await generateAIRecommendations(env, url, allAudits, safety, seo, crux);
+        const aiRecommendations = await generateAIRecommendations(env, url, allAudits, safety, seo, realUserData);
 
         // 3) قارن بآخر فحص سابق لنفس الرابط ونفس الحساب/IP
         const comparison = await getComparison(env, identifier, url, mobile?.performanceScore, mobile?.seoScore);
@@ -99,11 +95,9 @@ export async function onRequestPost(context) {
             desktop: desktop ? stripAudits(desktop) : null,
             safety,
             seo,
-            crux,
+            realUserData,
             aiRecommendations,
-            comparison,
-            nextAllowedAt: limitCheck.nextAllowedAt || null,
-            scansRemainingToday: limitCheck.remaining ?? null
+            comparison
         };
 
         // احفظ في الكاش وفي السجل التاريخي (من غير ما نستنى، مش لازم نأخر الرد بسببهم)
@@ -151,42 +145,28 @@ async function saveToCache(env, url, data) {
 }
 
 // ============================================================
-// الحد اليومي (3 فحوصات لكل حساب/IP) + فترة انتظار (7 دقايق بين كل فحص والتاني)
-// ملحوظة: عمود last_scan_at لازم يتضاف لجدول scan_limits لو لسه مش موجود:
-//   ALTER TABLE scan_limits ADD COLUMN last_scan_at INTEGER;
+// الحد اليومي (3 فحوصات لكل حساب/IP)
 // ============================================================
-const COOLDOWN_MS = 7 * 60 * 1000; // 7 دقايق
-const DAILY_LIMIT = 3;
-
 async function checkAndIncrementLimit(env, identifier) {
     const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-    const now = Date.now();
 
     try {
         const row = await env.DB.prepare(
-            "SELECT count, last_scan_at FROM scan_limits WHERE identifier = ? AND scan_date = ?"
+            "SELECT count FROM scan_limits WHERE identifier = ? AND scan_date = ?"
         ).bind(identifier, today).first();
 
         const currentCount = row?.count || 0;
-        const lastScanAt = row?.last_scan_at || 0;
 
-        // 1) فترة الانتظار أولاً (تسري حتى لو لسه فاضله فحوصات في اليوم)
-        const elapsed = now - lastScanAt;
-        if (lastScanAt && elapsed < COOLDOWN_MS) {
-            return { allowed: false, reason: 'cooldown', retryAfterSeconds: Math.ceil((COOLDOWN_MS - elapsed) / 1000) };
-        }
-
-        // 2) الحد اليومي
-        if (currentCount >= DAILY_LIMIT) {
-            return { allowed: false, reason: 'daily' };
+        if (currentCount >= 3) {
+            return { allowed: false };
         }
 
         await env.DB.prepare(
-            "INSERT INTO scan_limits (identifier, scan_date, count, last_scan_at) VALUES (?, ?, 1, ?) " +
-            "ON CONFLICT(identifier, scan_date) DO UPDATE SET count = count + 1, last_scan_at = excluded.last_scan_at"
-        ).bind(identifier, today, now).run();
+            "INSERT INTO scan_limits (identifier, scan_date, count) VALUES (?, ?, 1) " +
+            "ON CONFLICT(identifier, scan_date) DO UPDATE SET count = count + 1"
+        ).bind(identifier, today).run();
 
-        return { allowed: true, remaining: DAILY_LIMIT - (currentCount + 1), nextAllowedAt: now + COOLDOWN_MS };
+        return { allowed: true };
     } catch {
         return { allowed: true }; // لو الجدول لسه مش موجود، منمنعش المستخدم بسبب مشكلة عندنا
     }
@@ -327,6 +307,60 @@ function stripMarkdownLinks(text) {
 }
 
 // ============================================================
+// بيانات المستخدمين الحقيقيين (Chrome UX Report API)
+// بيانات حقيقية من زوار الموقع الفعليين، مش محاكاة معملية
+// ============================================================
+async function fetchCrUX(url, apiKey) {
+    const endpoint = `https://chromeuxreport.googleapis.com/v1/records:queryRecord?key=${apiKey}`;
+
+    // نحاول الأول على مستوى الصفحة بالظبط، ولو مفيش بيانات كافية نرجع لمستوى الدومين كله
+    let result = await tryCruxQuery(endpoint, { url });
+    let level = 'page';
+
+    if (!result) {
+        const origin = new URL(url).origin;
+        result = await tryCruxQuery(endpoint, { origin });
+        level = 'origin';
+    }
+
+    if (!result) return null;
+
+    const metrics = result.record?.metrics || {};
+
+    return {
+        level, // 'page' لو بيانات دقيقة للصفحة، 'origin' لو بيانات عامة للدومين كله
+        collectionPeriod: result.record?.collectionPeriod || null,
+        largestContentfulPaint: extractCruxMetric(metrics.largest_contentful_paint),
+        cumulativeLayoutShift: extractCruxMetric(metrics.cumulative_layout_shift),
+        interactionToNextPaint: extractCruxMetric(metrics.interaction_to_next_paint),
+        timeToFirstByte: extractCruxMetric(metrics.experimental_time_to_first_byte)
+    };
+}
+
+async function tryCruxQuery(endpoint, body) {
+    const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+    });
+
+    if (!res.ok) return null; // 404 يعني مفيش بيانات كافية من مستخدمين حقيقيين، ده طبيعي لمواقع صغيرة
+    return await res.json();
+}
+
+function extractCruxMetric(metric) {
+    if (!metric) return null;
+
+    const goodBucket = metric.histogram?.[0]?.density || 0;
+    const p75 = metric.percentiles?.p75 ?? null;
+
+    return {
+        p75,
+        goodPercent: Math.round(goodBucket * 100)
+    };
+}
+
+// ============================================================
 // فحص الأمان (Safe Browsing API)
 // ============================================================
 async function fetchSafeBrowsing(url, apiKey) {
@@ -356,53 +390,6 @@ async function fetchSafeBrowsing(url, apiKey) {
     return {
         isSafe,
         threats: isSafe ? [] : data.matches.map(m => m.threatType)
-    };
-}
-
-// ============================================================
-// بيانات المستخدمين الحقيقية (Chrome UX Report / CrUX)
-// دي بيانات فعلية من مستخدمين حقيقيين زاروا الموقع بمتصفح Chrome
-// (مش تقدير Lab زي Lighthouse) — بتتطلب حجم زيارات كافي، ولو مفيش
-// بيانات كفاية بيرجع 404 وده طبيعي جداً للمواقع الصغيرة/الجديدة.
-// ============================================================
-async function fetchCrUX(url, apiKey) {
-    const endpoint = `https://chromeuxreport.googleapis.com/v1/records:queryRecord?key=${apiKey}`;
-    const origin = new URL(url).origin;
-
-    const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ origin })
-    });
-
-    if (res.status === 404) {
-        return { available: false, reason: 'مفيش بيانات مستخدمين حقيقيين كفاية للموقع ده لسه (محتاج حجم زيارات أكبر).' };
-    }
-    if (!res.ok) {
-        return { available: false, reason: 'تعذّر جلب بيانات المستخدمين الحقيقية.' };
-    }
-
-    const data = await res.json();
-    const metrics = data?.record?.metrics || {};
-
-    const pick = (key) => {
-        const m = metrics[key];
-        if (!m) return null;
-        return {
-            p75: m.percentiles?.p75 ?? null,
-            good: m.histogram?.[0]?.density != null ? Math.round(m.histogram[0].density * 100) : null,
-            needsImprovement: m.histogram?.[1]?.density != null ? Math.round(m.histogram[1].density * 100) : null,
-            poor: m.histogram?.[2]?.density != null ? Math.round(m.histogram[2].density * 100) : null
-        };
-    };
-
-    return {
-        available: true,
-        collectionPeriod: data?.record?.collectionPeriod || null,
-        largestContentfulPaint: pick('largest_contentful_paint'),
-        interactionToNextPaint: pick('interaction_to_next_paint'),
-        cumulativeLayoutShift: pick('cumulative_layout_shift'),
-        firstContentfulPaint: pick('first_contentful_paint')
     };
 }
 
@@ -455,21 +442,11 @@ function extractAttr(html, regex) {
 
 // ============================================================
 // تدوير مفاتيح Gemini (Round-Robin عبر D1)
-// دايناميك بالكامل: يقرأ GEMINI_API_KEY, GEMINI_API_KEY2, GEMINI_API_KEY3...
-// لحد ما يلاقي رقم مفقود، فلو ضفت مفتاح خامس (GEMINI_API_KEY5) هيتقرأ
-// تلقائياً من غير أي تعديل تاني في الكود.
 // ============================================================
 function getGeminiKeys(env) {
-    const keys = [];
-    if (env.GEMINI_API_KEY) keys.push({ key: env.GEMINI_API_KEY, index: 1 });
-
-    let i = 2;
-    while (env[`GEMINI_API_KEY${i}`]) {
-        keys.push({ key: env[`GEMINI_API_KEY${i}`], index: i });
-        i++;
-    }
-
-    return keys;
+    return [env.GEMINI_API_KEY, env.GEMINI_API_KEY2, env.GEMINI_API_KEY3, env.GEMINI_API_KEY4]
+        .map((key, i) => ({ key, index: i + 1 }))
+        .filter(k => !!k.key);
 }
 
 async function getStartIndex(env, totalKeys) {
@@ -490,14 +467,14 @@ async function getStartIndex(env, totalKeys) {
 // ============================================================
 // توصيات الذكاء الاصطناعي (Gemini API) — مع تدوير مفاتيح وFallback
 // ============================================================
-async function generateAIRecommendations(env, url, audits, safety, seo, crux) {
+async function generateAIRecommendations(env, url, audits, safety, seo, realUserData) {
     const keys = getGeminiKeys(env);
 
     if (keys.length === 0) {
         return fallbackRecommendations('مفيش أي مفتاح Gemini مربوط بالمشروع.');
     }
 
-    const prompt = buildPrompt(url, audits, safety, seo, crux);
+    const prompt = buildPrompt(url, audits, safety, seo, realUserData);
     const startIndex = await getStartIndex(env, keys.length);
 
     // نجرب كل مفتاح بالترتيب بدءاً من دوره، ولو خلّص كوتته ننتقل للتالي تلقائياً
@@ -522,7 +499,7 @@ async function generateAIRecommendations(env, url, audits, safety, seo, crux) {
     return fallbackRecommendations('يرجى المحاولة بعد بضع دقائق.');
 }
 
-function buildPrompt(url, audits, safety, seo, crux) {
+function buildPrompt(url, audits, safety, seo, realUserData) {
     return `
 أنت مهندس ويب خبير في الأداء والأرشفة (SEO). قدّامك تقرير Lighthouse كامل لموقع ${url}
 (موبايل وديسكتوب مع بعض)، فيه كل المشاكل الحقيقية اللي الموقع فاشل فيها (كبيرة وصغيرة، مش ملخص فقط).
@@ -532,10 +509,18 @@ ${JSON.stringify(audits)}
 
 بيانات إضافية عن الصفحة: ${seo ? JSON.stringify(seo) : 'غير متاحة'}
 بيانات الأمان: ${safety ? JSON.stringify(safety) : 'غير متاحة'}
-بيانات مستخدمين حقيقيين (CrUX، غير Lab): ${crux?.available ? JSON.stringify(crux) : 'غير متاحة لصغر حجم الزيارات'}
+
+${realUserData ? `
+بيانات حقيقية من زوار الموقع الفعليين آخر 28 يوم (مش محاكاة، دي تجربة المستخدمين الحقيقية):
+${JSON.stringify(realUserData)}
+(goodPercent = نسبة الزوار اللي شافوا تجربة كويسة في المقياس ده. لو goodPercent قليل رغم إن نتيجة
+Lighthouse المعملية كويسة، ده مهم جداً تنبّه عليه لأنه معناه الفحص المعملي مابيعكسش تجربة المستخدم
+الحقيقية على الإنترنت والأجهزة الواقعية)
+` : 'بيانات المستخدمين الحقيقيين غير متاحة (الموقع لسه مفيهوش زيارات كافية من Chrome لتوليدها).'}
 
 المطلوب منك بالظبط، لكل مشكلة مهمة (اختار أهمها، صغيرة كانت أو كبيرة، بحد أقصى 12 مشكلة):
 - severity: صنّفها "critical" أو "high" أو "medium" فقط، حسب حجم تأثيرها الفعلي
+  (لو فيه تعارض بين نتيجة المعمل وبيانات المستخدمين الحقيقيين، اعتمد على الحقيقية في التصنيف)
 - title: اسم المشكلة بالعربي وبشكل مباشر
 - impact: تأثيرها الفعلي بالأرقام (مثال: "بيبطّئ التحميل 1.2 ثانية على الموبايل")
 - steps: مصفوفة (array) من الخطوات العملية المرقّمة تلقائياً، كل خطوة جملة قصيرة واحدة ومباشرة
