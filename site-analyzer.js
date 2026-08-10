@@ -132,12 +132,110 @@ function renderResults(data) {
     renderKeyIndicator(data.aiRecommendations?.keyUsed);
     renderComparisonBadge(data.comparison, data.fromCache);
     renderCruxCard(data.realUserData);
+    renderSeoDetails(data.seo);
+    renderGeoDetails(data.geo);
 
     document.getElementById('result-meta').textContent =
         data.aiRecommendations?.suggestedMetaDescription || 'لا توجد توصية';
 
     document.getElementById('result-schema').textContent =
         data.aiRecommendations?.schemaMarkup || 'لا يوجد كود مقترح';
+}
+
+// ============================================================
+// كارت تفاصيل SEO
+// ============================================================
+function renderSeoDetails(seo) {
+    const card = document.getElementById('seo-details-card');
+    const grid = document.getElementById('seo-details-grid');
+    if (!card || !grid) return;
+
+    if (!seo) {
+        card.style.display = 'none';
+        return;
+    }
+
+    const items = [];
+
+    items.push(seoItem(
+        seo.title ? 'ok' : 'bad',
+        'عنوان الصفحة (Title)',
+        seo.title ? `"${seo.title}" (${seo.titleLength} حرف)` : 'مفقود تماماً'
+    ));
+
+    items.push(seoItem(
+        seo.hasNoindex ? 'bad' : (seo.metaDescription ? 'ok' : 'warn'),
+        'وصف Meta',
+        seo.metaDescription ? `${seo.metaDescriptionLength} حرف` : 'مفقود'
+    ));
+
+    if (seo.hasNoindex) {
+        items.push(seoItem('bad', 'noindex ⚠️', 'الصفحة دي متعلّم عليها بمنع الظهور في نتائج البحث نهائياً!'));
+    }
+
+    items.push(seoItem(
+        seo.h1Count === 1 ? 'ok' : 'warn',
+        'عناوين H1',
+        `${seo.h1Count} عنوان` + (seo.h1Count === 0 ? ' (لازم يكون فيه واحد بالظبط)' : seo.h1Count > 1 ? ' (المفروض واحد بس)' : '')
+    ));
+
+    items.push(seoItem(
+        seo.imagesWithoutAlt === 0 ? 'ok' : 'warn',
+        'صور بدون alt',
+        `${seo.imagesWithoutAlt} من ${seo.totalImages} صورة`
+    ));
+
+    items.push(seoItem(seo.hasCanonical ? 'ok' : 'warn', 'Canonical Link', seo.hasCanonical ? 'موجود' : 'مفقود'));
+    items.push(seoItem(seo.hasSchema ? 'ok' : 'warn', 'Schema Markup', seo.hasSchema ? 'موجود' : 'مفقود'));
+    items.push(seoItem(seo.hasViewport ? 'ok' : 'bad', 'Viewport Meta', seo.hasViewport ? 'موجود' : 'مفقود'));
+    items.push(seoItem(seo.hasFavicon ? 'ok' : 'warn', 'Favicon', seo.hasFavicon ? 'موجود' : 'مفقود'));
+
+    const ogCount = [seo.openGraph?.title, seo.openGraph?.description, seo.openGraph?.image].filter(Boolean).length;
+    items.push(seoItem(ogCount === 3 ? 'ok' : 'warn', 'Open Graph (مشاركة السوشيال)', `${ogCount}/3 وسوم موجودة`));
+
+    items.push(seoItem('info', 'عدد الكلمات', `${seo.wordCount} كلمة تقريباً`));
+    items.push(seoItem('info', 'الروابط', `${seo.internalLinks} داخلي / ${seo.externalLinks} خارجي`));
+
+    grid.innerHTML = items.join('');
+    card.style.display = 'block';
+}
+
+// ============================================================
+// كارت GEO
+// ============================================================
+function renderGeoDetails(geo) {
+    const card = document.getElementById('geo-card');
+    const grid = document.getElementById('geo-details-grid');
+    if (!card || !grid) return;
+
+    if (!geo) {
+        card.style.display = 'none';
+        return;
+    }
+
+    const items = [];
+    items.push(seoItem(geo.hasLlmsTxt ? 'ok' : 'warn', 'ملف llms.txt', geo.hasLlmsTxt ? 'موجود' : 'مفقود'));
+    items.push(seoItem(geo.hasRobotsTxt ? 'ok' : 'warn', 'ملف robots.txt', geo.hasRobotsTxt ? 'موجود' : 'مفقود'));
+
+    if (geo.aiCrawlersBlocked?.length > 0) {
+        items.push(seoItem('bad', 'بوتات AI ممنوعة', geo.aiCrawlersBlocked.join(', ')));
+    } else {
+        items.push(seoItem('ok', 'بوتات AI', 'مفيش أي بوت ذكاء اصطناعي ممنوع'));
+    }
+
+    grid.innerHTML = items.join('');
+    card.style.display = 'block';
+}
+
+function seoItem(status, label, value) {
+    const icon = status === 'ok' ? '✅' : status === 'bad' ? '❌' : status === 'warn' ? '⚠️' : 'ℹ️';
+    return `
+        <div class="seo-item seo-item--${status}">
+            <span class="seo-item-icon">${icon}</span>
+            <span class="seo-item-label">${label}</span>
+            <span class="seo-item-value">${value}</span>
+        </div>
+    `;
 }
 
 // ============================================================
@@ -237,8 +335,8 @@ function renderDevicePanel(device, deviceData, safety) {
         { label: 'إمكانية الوصول', value: deviceData?.accessibilityScore ?? null },
         {
             label: 'الأمان',
-            value: safety ? (safety.isSafe ? 100 : 0) : null,
-            customText: safety ? (safety.isSafe ? 'آمن' : 'يوجد تهديد') : null
+            value: safety ? safety.score : null,
+            customText: safety && !safety.isSafe ? 'يوجد تهديد' : null
         }
     ];
 

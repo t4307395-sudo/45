@@ -1582,3 +1582,57 @@ a:hover {
     color: var(--text-muted);
     margin-top: 0.7rem;
 }
+
+/* ==========================================================================
+   شبكة تفاصيل SEO / GEO
+   ========================================================================== */
+
+.seo-details-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 0.6rem;
+    margin-top: 0.9rem;
+}
+
+.seo-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+    background-color: #fafafa;
+    border: 1px solid #eee;
+    border-radius: var(--radius-sm);
+    padding: 0.6rem 0.8rem;
+    font-size: 0.82rem;
+}
+
+.seo-item-icon {
+    flex-shrink: 0;
+    font-size: 0.9rem;
+    line-height: 1.3;
+}
+
+.seo-item-label {
+    font-weight: 700;
+    flex-shrink: 0;
+}
+
+.seo-item-value {
+    color: var(--text-muted);
+    word-break: break-word;
+}
+
+.seo-item--bad {
+    background-color: #FEF2F2;
+    border-color: #FECACA;
+}
+
+.seo-item--warn {
+    background-color: #FFFBEB;
+    border-color: #FDE68A;
+}
+
+.seo-item--ok {
+    background-color: #F0FDF4;
+    border-color: #BBF7D0;
+}
+

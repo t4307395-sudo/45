@@ -61,25 +61,48 @@ export async function onRequestPost(context) {
     const apiKey = env.EXT_TOKEN_MAIN;
 
     try {
-        // تشغيل كل الفحوصات بالتوازي: موبايل + ديسكتوب + أمان + تحليل HTML + بيانات مستخدمين حقيقيين
-        const [mobileResult, desktopResult, safeBrowsingResult, pageContent, cruxResult] = await Promise.allSettled([
+        // تشغيل كل الفحوصات بالتوازي: موبايل + ديسكتوب + أمان (تصنيف خبيث) + أمان (إعدادات فعلية) + تحليل HTML + بيانات مستخدمين حقيقيين + GEO
+        const [mobileResult, desktopResult, safeBrowsingResult, securityAuditResult, pageContent, cruxResult, geoResult] = await Promise.allSettled([
             fetchPageSpeed(url, apiKey, 'mobile'),
             fetchPageSpeed(url, apiKey, 'desktop'),
             fetchSafeBrowsing(url, apiKey),
+            analyzeSecurityConfig(url),
             fetchAndParsePage(url),
-            fetchCrUX(url, apiKey)
+            fetchCrUX(url, apiKey),
+            fetchGeoSignals(url)
         ]);
 
         const mobile = mobileResult.status === 'fulfilled' ? mobileResult.value : null;
         const desktop = desktopResult.status === 'fulfilled' ? desktopResult.value : null;
-        const safety = safeBrowsingResult.status === 'fulfilled' ? safeBrowsingResult.value : null;
+        const malwareCheck = safeBrowsingResult.status === 'fulfilled' ? safeBrowsingResult.value : null;
+        const securityConfig = securityAuditResult.status === 'fulfilled' ? securityAuditResult.value : null;
         const seo = pageContent.status === 'fulfilled' ? pageContent.value : null;
         const realUserData = cruxResult.status === 'fulfilled' ? cruxResult.value : null;
+        const geo = geoResult.status === 'fulfilled' ? geoResult.value : null;
 
-        // دمج مشاكل الموبايل والديسكتوب مع بعض (كل مشكلة موسومة بالجهاز)
+        // دمج فحص "الموقع مصنّف كخبيث؟" مع فحص "إعدادات الأمان الفعلية" في كيان واحد
+        // السكور النهائي = 0 فوري لو الموقع مصنّف خبيث، وإلا سكور إعدادات الأمان الفعلية
+        const safety = buildFinalSecurity(malwareCheck, securityConfig);
+
+        // 2.5) فحص الملفات الحساسة المكشوفة — بس لو الدومين متحقق من ملكيته لنفس الحساب
+        const domain = new URL(url).hostname;
+        const isOwnershipVerified = await checkOwnershipVerified(env, identifier, domain);
+        let exposedFilesResult = null;
+        if (isOwnershipVerified) {
+            exposedFilesResult = await checkExposedFiles(url);
+            if (exposedFilesResult.issues.length > 0) {
+                safety.score = Math.max(0, safety.score - exposedFilesResult.issues.length * 15);
+                safety.issues = [...(safety.issues || []), ...exposedFilesResult.issues];
+            }
+        }
+
+        // دمج مشاكل الموبايل والديسكتوب والأمان وGEO مع بعض (كل مشكلة موسومة بالجهاز/الفئة)
         const allAudits = [
             ...(mobile?.actionableAudits || []).map(a => ({ ...a, device: 'mobile' })),
-            ...(desktop?.actionableAudits || []).map(a => ({ ...a, device: 'desktop' }))
+            ...(desktop?.actionableAudits || []).map(a => ({ ...a, device: 'desktop' })),
+            ...(securityConfig?.issues || []).map(a => ({ ...a, device: 'security' })),
+            ...(exposedFilesResult?.issues || []).map(a => ({ ...a, device: 'security' })),
+            ...(geo?.issues || []).map(a => ({ ...a, device: 'geo' }))
         ];
 
         const aiRecommendations = await generateAIRecommendations(env, url, allAudits, safety, seo, realUserData);
@@ -94,7 +117,9 @@ export async function onRequestPost(context) {
             mobile: mobile ? stripAudits(mobile) : null,
             desktop: desktop ? stripAudits(desktop) : null,
             safety,
+            deepScan: { ownershipVerified: isOwnershipVerified, exposedFiles: exposedFilesResult },
             seo,
+            geo,
             realUserData,
             aiRecommendations,
             comparison
@@ -394,7 +419,235 @@ async function fetchSafeBrowsing(url, apiKey) {
 }
 
 // ============================================================
-// تحليل HTML أساسي (Title, Meta, Headings, Schema...)
+// فحص إعدادات الأمان الفعلية (Security Headers Audit)
+// فحص "سلبي" بالكامل (Passive) — بيقرا استجابة الموقع العادية بس،
+// من غير أي محاولة اختراق أو استغلال ثغرات. نفس أسلوب أدوات معروفة
+// زي securityheaders.com و Mozilla Observatory.
+// ============================================================
+async function analyzeSecurityConfig(url) {
+    const res = await fetch(url, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; SuperWebBot/1.0; +security-audit)' },
+        redirect: 'follow'
+    });
+
+    const headers = res.headers;
+    const finalUrl = res.url || url;
+    const isHttps = finalUrl.startsWith('https://');
+    const html = await res.text().catch(() => '');
+
+    const issues = [];
+    let score = 100;
+
+    const deduct = (points, entry) => {
+        score -= points;
+        issues.push(entry);
+    };
+
+    // 1) HTTPS أصلاً
+    if (!isHttps) {
+        deduct(30, {
+            id: 'no-https',
+            title: 'الموقع مش شغال بـ HTTPS',
+            description: 'الاتصال بين المستخدم والموقع غير مشفر، أي حد على نفس الشبكة يقدر يقرا أو يعدّل البيانات المتبادلة.',
+            score: 0
+        });
+    }
+
+    // 2) HSTS
+    if (isHttps && !headers.get('strict-transport-security')) {
+        deduct(12, {
+            id: 'missing-hsts',
+            title: 'هيدر Strict-Transport-Security (HSTS) مفقود',
+            description: 'من غير الهيدر ده، المتصفح ممكن يقبل يفتح نسخة HTTP غير مشفرة من الموقع لو حد حاول يجبره على كده.',
+            score: 0.5
+        });
+    }
+
+    // 3) Content-Security-Policy
+    if (!headers.get('content-security-policy')) {
+        deduct(18, {
+            id: 'missing-csp',
+            title: 'هيدر Content-Security-Policy (CSP) مفقود',
+            description: 'من غير CSP، لو حصل XSS في الموقع (حتى بالغلط)، مفيش طبقة حماية إضافية توقف تنفيذ كود خبيث.',
+            score: 0.3
+        });
+    }
+
+    // 4) X-Content-Type-Options
+    if (!headers.get('x-content-type-options')) {
+        deduct(8, {
+            id: 'missing-x-content-type-options',
+            title: 'هيدر X-Content-Type-Options مفقود',
+            description: 'المتصفح ممكن "يخمّن" نوع الملف بدل ما يلتزم بالنوع المعلن، وده ممكن يستغل لتنفيذ ملفات كأنها كود.',
+            score: 0.5
+        });
+    }
+
+    // 5) X-Frame-Options / frame-ancestors
+    const csp = headers.get('content-security-policy') || '';
+    if (!headers.get('x-frame-options') && !/frame-ancestors/i.test(csp)) {
+        deduct(10, {
+            id: 'missing-frame-protection',
+            title: 'الموقع مش محمي من هجمات Clickjacking',
+            description: 'مفيش X-Frame-Options ولا frame-ancestors في CSP، يعني موقع تاني يقدر يحط موقعك جوه iframe مخفي ويخدع المستخدمين.',
+            score: 0.5
+        });
+    }
+
+    // 6) Referrer-Policy
+    if (!headers.get('referrer-policy')) {
+        deduct(5, {
+            id: 'missing-referrer-policy',
+            title: 'هيدر Referrer-Policy مفقود',
+            description: 'روابط الموقع بتسرّب عنوان الصفحة الكامل (ممكن يحتوي بيانات حساسة في الرابط) للمواقع اللي بيتنقل ليها الزائر.',
+            score: 0.3
+        });
+    }
+
+    // 7) تسريب معلومات السيرفر (Server / X-Powered-By)
+    const serverHeader = headers.get('server') || '';
+    const poweredBy = headers.get('x-powered-by') || '';
+    if (/\d/.test(serverHeader) || poweredBy) {
+        deduct(6, {
+            id: 'server-info-leak',
+            title: 'الموقع بيسرّب معلومات عن السيرفر أو التقنية المستخدمة',
+            description: `القيمة الظاهرة: "${serverHeader}${poweredBy ? ' / ' + poweredBy : ''}" — دي معلومات بتسهّل على أي حد يدور على ثغرات معروفة في نفس النسخة.`,
+            score: 0.4
+        });
+    }
+
+    // 8) محتوى مختلط (Mixed Content): موارد HTTP جوه صفحة HTTPS
+    if (isHttps) {
+        const httpResources = (html.match(/(?:src|href)=["']http:\/\/[^"']+["']/gi) || []).length;
+        if (httpResources > 0) {
+            deduct(10, {
+                id: 'mixed-content',
+                title: `محتوى مختلط (Mixed Content): ${httpResources} مورد بيتحمّل عبر HTTP غير مشفر`,
+                description: 'صور أو سكريبتات أو ستايل شيتات بتتحمّل بروابط http:// عادية جوه صفحة https://، وده بيفتح ثغرة تلاعب في المحتوى.',
+                score: 0.5
+            });
+        }
+    }
+
+    // 9) Set-Cookie بدون Secure/HttpOnly/SameSite
+    const cookies = typeof headers.getSetCookie === 'function' ? headers.getSetCookie() : [];
+    const insecureCookies = cookies.filter(c =>
+        !/secure/i.test(c) || !/httponly/i.test(c) || !/samesite/i.test(c)
+    );
+    if (insecureCookies.length > 0) {
+        deduct(8, {
+            id: 'insecure-cookies',
+            title: `${insecureCookies.length} كوكي مفعّلة بدون كل خصائص الحماية (Secure / HttpOnly / SameSite)`,
+            description: 'الكوكيز دي ممكن تتسرق عن طريق XSS أو تتقرا عبر اتصال غير مشفر لو مش محمية بالخصائص التلاتة دي مع بعض.',
+            score: 0.5
+        });
+    }
+
+    score = Math.max(0, Math.round(score));
+
+    return {
+        score,
+        checkedUrl: finalUrl,
+        isHttps,
+        headersChecked: {
+            hsts: !!headers.get('strict-transport-security'),
+            csp: !!headers.get('content-security-policy'),
+            xContentTypeOptions: !!headers.get('x-content-type-options'),
+            frameProtection: !!headers.get('x-frame-options') || /frame-ancestors/i.test(csp),
+            referrerPolicy: !!headers.get('referrer-policy')
+        },
+        issues
+    };
+}
+
+// دمج فحص "الموقع خبيث؟" (Safe Browsing) مع فحص "إعدادات الأمان" في نتيجة نهائية واحدة
+function buildFinalSecurity(malwareCheck, securityConfig) {
+    // لو Safe Browsing نفسه فشل (مثلاً مشكلة في المفتاح)، منعتمدش عليه في القرار
+    const isMalwareFlagged = malwareCheck ? !malwareCheck.isSafe : false;
+
+    if (isMalwareFlagged) {
+        // موقع مصنّف كخبيث/تصيّد = صفر فوري بغض النظر عن أي حاجة تانية
+        return {
+            score: 0,
+            isSafe: false,
+            threats: malwareCheck.threats,
+            configScore: securityConfig?.score ?? null,
+            issues: securityConfig?.issues || []
+        };
+    }
+
+    return {
+        score: securityConfig?.score ?? (malwareCheck ? 100 : null),
+        isSafe: true,
+        threats: [],
+        configScore: securityConfig?.score ?? null,
+        issues: securityConfig?.issues || []
+    };
+}
+
+// ============================================================
+// فحص ملكية الدومين (شرط لازم قبل فحص الملفات الحساسة)
+// ============================================================
+async function checkOwnershipVerified(env, identifier, domain) {
+    try {
+        const row = await env.DB.prepare(
+            "SELECT verified FROM site_verifications WHERE identifier = ? AND domain = ?"
+        ).bind(identifier, domain).first();
+        return !!row?.verified;
+    } catch {
+        return false;
+    }
+}
+
+// ============================================================
+// فحص ملفات حساسة مكشوفة — فحص "سلبي" بحت (GET عادي لمسار معروف،
+// نتأكد بس إن الملف مش راجع 404). ده بيتشغل فقط بعد التحقق من الملكية.
+// مفيش أي محاولة استغلال أو تجاوز صلاحيات هنا، مجرد سؤال "الملف ده موجود؟"
+// ============================================================
+const SENSITIVE_PATHS = [
+    { path: '.env', label: 'ملف .env (متغيرات بيئة/مفاتيح سرية)' },
+    { path: '.git/config', label: 'مجلد .git مكشوف (كود المصدر الكامل والتاريخ)' },
+    { path: 'wp-config.php.bak', label: 'نسخة احتياطية من wp-config.php' },
+    { path: '.DS_Store', label: 'ملف .DS_Store (بيكشف أسماء ملفات السيرفر)' },
+    { path: 'config.php.bak', label: 'نسخة احتياطية من config.php' },
+    { path: 'phpinfo.php', label: 'صفحة phpinfo() (بتكشف تفاصيل السيرفر بالكامل)' },
+    { path: '.htpasswd', label: 'ملف .htpasswd (بيانات مصادقة)' },
+    { path: 'backup.zip', label: 'ملف backup.zip في الجذر' }
+];
+
+async function checkExposedFiles(url) {
+    const origin = new URL(url).origin;
+    const issues = [];
+
+    const checks = SENSITIVE_PATHS.map(async ({ path, label }) => {
+        try {
+            const res = await fetch(`${origin}/${path}`, {
+                method: 'GET',
+                headers: { 'User-Agent': 'Mozilla/5.0 (compatible; SuperWebBot/1.0; +owner-verified-scan)' },
+                redirect: 'manual' // ريدايركت لصفحة 404 مخصصة يبقى برضو "مش موجود"، منتبعوش
+            });
+
+            // 200 صريحة بس = الملف موجود فعلاً. أي حاجة تانية (404, 403, redirect) = مش مكشوف
+            if (res.status === 200) {
+                issues.push({
+                    id: `exposed-${path.replace(/[^a-z0-9]/gi, '-')}`,
+                    title: `ملف حساس مكشوف: ${label}`,
+                    description: `تم العثور على ${path} متاح للعموم على ${origin}/${path}. احذفه أو امنع الوصول ليه فوراً.`,
+                    score: 0.2
+                });
+            }
+        } catch {
+            // فشل الطلب (timeout, DNS...) — نتجاهله، مش دليل على وجود الملف
+        }
+    });
+
+    await Promise.allSettled(checks);
+
+    return { checkedPaths: SENSITIVE_PATHS.length, issues };
+}
+
+// ============================================================
+// تحليل SEO موسّع (Title, Meta, Headings, Schema, Robots, OG...)
 // ============================================================
 async function fetchAndParsePage(url) {
     const res = await fetch(url, {
@@ -410,11 +663,48 @@ async function fetchAndParsePage(url) {
     const title = extractTag(html, /<title[^>]*>([\s\S]*?)<\/title>/i);
     const metaDescription = extractAttr(html, /<meta\s+name=["']description["']\s+content=["']([^"']*)["']/i);
     const h1Count = (html.match(/<h1[\s>]/gi) || []).length;
+    const h2Count = (html.match(/<h2[\s>]/gi) || []).length;
     const imgTags = html.match(/<img\s[^>]*>/gi) || [];
     const imagesWithoutAlt = imgTags.filter(tag => !/alt=["'][^"']+["']/i.test(tag)).length;
     const hasCanonical = /<link[^>]+rel=["']canonical["']/i.test(html);
     const hasSchema = /application\/ld\+json/i.test(html);
     const isHttps = url.startsWith('https://');
+
+    // فحوصات إضافية
+    const hasViewport = /<meta\s+name=["']viewport["']/i.test(html);
+    const hasFavicon = /<link[^>]+rel=["'](?:icon|shortcut icon)["']/i.test(html);
+    const hreflangCount = (html.match(/<link[^>]+rel=["']alternate["'][^>]+hreflang=/gi) || []).length;
+
+    // Robots meta tag (لو فيه noindex، الموقع مش هيظهر في نتائج البحث خالص — مشكلة حرجة)
+    const robotsMetaMatch = html.match(/<meta\s+name=["']robots["']\s+content=["']([^"']*)["']/i);
+    const robotsMeta = robotsMetaMatch ? robotsMetaMatch[1].toLowerCase() : null;
+    const hasNoindex = robotsMeta ? robotsMeta.includes('noindex') : false;
+
+    // Open Graph (مهم لمشاركة الروابط على السوشيال ميديا)
+    const hasOgTitle = /<meta[^>]+property=["']og:title["']/i.test(html);
+    const hasOgDescription = /<meta[^>]+property=["']og:description["']/i.test(html);
+    const hasOgImage = /<meta[^>]+property=["']og:image["']/i.test(html);
+
+    // عدد الروابط الداخلية/الخارجية (تقريبي، مش دقيق 100% بس مؤشر كافي)
+    const origin = new URL(url).origin;
+    const allLinks = [...html.matchAll(/<a\s+[^>]*href=["']([^"'#]+)["']/gi)].map(m => m[1]);
+    let internalLinks = 0, externalLinks = 0;
+    allLinks.forEach(href => {
+        if (href.startsWith('http://') || href.startsWith('https://')) {
+            if (href.startsWith(origin)) internalLinks++; else externalLinks++;
+        } else if (!href.startsWith('mailto:') && !href.startsWith('tel:') && !href.startsWith('javascript:')) {
+            internalLinks++;
+        }
+    });
+
+    // عدد كلمات تقريبي للمحتوى النصي (بعد شيل الوسوم)
+    const textOnly = html
+        .replace(/<script[\s\S]*?<\/script>/gi, '')
+        .replace(/<style[\s\S]*?<\/style>/gi, '')
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+    const wordCount = textOnly ? textOnly.split(' ').length : 0;
 
     return {
         title: title || null,
@@ -422,11 +712,85 @@ async function fetchAndParsePage(url) {
         metaDescription: metaDescription || null,
         metaDescriptionLength: metaDescription ? metaDescription.length : 0,
         h1Count,
+        h2Count,
         totalImages: imgTags.length,
         imagesWithoutAlt,
         hasCanonical,
         hasSchema,
-        isHttps
+        isHttps,
+        hasViewport,
+        hasFavicon,
+        hreflangCount,
+        hasNoindex,
+        robotsMeta,
+        openGraph: { title: hasOgTitle, description: hasOgDescription, image: hasOgImage },
+        internalLinks,
+        externalLinks,
+        wordCount
+    };
+}
+
+// ============================================================
+// GEO — تحسين الظهور في محركات الإجابة بالذكاء الاصطناعي
+// (ChatGPT Search, Perplexity, Google AI Overviews...)
+// فحص "سلبي" بالكامل: بيقرا robots.txt وllms.txt الموجودين أصلاً
+// ============================================================
+const AI_CRAWLERS = [
+    'GPTBot', 'ChatGPT-User', 'ClaudeBot', 'anthropic-ai', 'Google-Extended',
+    'PerplexityBot', 'CCBot', 'Bytespider', 'Applebot-Extended'
+];
+
+async function fetchGeoSignals(url) {
+    const origin = new URL(url).origin;
+
+    const [robotsRes, llmsRes] = await Promise.allSettled([
+        fetch(`${origin}/robots.txt`, { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; SuperWebBot/1.0)' } }),
+        fetch(`${origin}/llms.txt`, { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; SuperWebBot/1.0)' } })
+    ]);
+
+    let robotsTxt = null;
+    if (robotsRes.status === 'fulfilled' && robotsRes.value.ok) {
+        robotsTxt = await robotsRes.value.text();
+    }
+
+    const hasLlmsTxt = llmsRes.status === 'fulfilled' && llmsRes.value.ok;
+
+    const blockedBots = [];
+    if (robotsTxt) {
+        // فحص تقريبي: هل فيه User-agent: <بوت AI معروف> متبوع بـ Disallow: /
+        const blocks = robotsTxt.split(/User-agent:/i).slice(1);
+        for (const block of blocks) {
+            const agentLine = block.split('\n')[0].trim();
+            const matchedBot = AI_CRAWLERS.find(bot => agentLine.toLowerCase().includes(bot.toLowerCase()));
+            if (matchedBot && /Disallow:\s*\/\s*$/im.test(block.split(/User-agent:/i)[0] || block)) {
+                blockedBots.push(matchedBot);
+            }
+        }
+    }
+
+    const issues = [];
+    if (!hasLlmsTxt) {
+        issues.push({
+            id: 'missing-llms-txt',
+            title: 'مفيش ملف llms.txt',
+            description: 'ملف llms.txt بيدي لمحركات الذكاء الاصطناعي ملخص منظم عن موقعك، بيسهّل عليها فهم محتواك واقتباسه في إجاباتها.',
+            score: 0.3
+        });
+    }
+    if (blockedBots.length > 0) {
+        issues.push({
+            id: 'ai-crawlers-blocked',
+            title: `robots.txt بيمنع بوتات AI معروفة: ${blockedBots.join(', ')}`,
+            description: 'لو محتواك مسموح يظهر في إجابات الذكاء الاصطناعي، امنعهم يقلل فرصة ظهور موقعك في نتائج ChatGPT/Perplexity/Google AI Overviews.',
+            score: 0.4
+        });
+    }
+
+    return {
+        hasLlmsTxt,
+        hasRobotsTxt: !!robotsTxt,
+        aiCrawlersBlocked: blockedBots,
+        issues
     };
 }
 

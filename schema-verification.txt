@@ -1,0 +1,12 @@
+-- التحقق من ملكية الموقع (شرط لازم قبل أي فحص أمان أعمق من الـ Headers)
+-- الطريقة: نديله كود عشوائي، هو يحطه في ملف على السيرفر بتاعه بمسار ثابت،
+-- إحنا نتأكد إن الملف موجود فعلاً بنفس الكود قبل ما نسمح بالفحص الأعمق.
+CREATE TABLE IF NOT EXISTS site_verifications (
+    identifier   TEXT NOT NULL,       -- الإيميل
+    domain       TEXT NOT NULL,       -- example.com (من غير https:// أو /)
+    token        TEXT NOT NULL,       -- الكود العشوائي اللي هيتحط في الملف
+    verified     INTEGER NOT NULL DEFAULT 0,
+    created_at   INTEGER NOT NULL,
+    verified_at  INTEGER,
+    PRIMARY KEY (identifier, domain)
+);
