@@ -1,0 +1,38 @@
+<?xml version='1.0' encoding='utf-8'?>
+<rss version="2.0">
+  <channel>
+    <title>Krack Pages</title>
+    <link>https://krack.pages.dev/</link>
+    <description>Krack Web Platform and Tools</description>
+    <item>
+      <title>Home</title>
+      <link>https://krack.pages.dev/</link>
+      <guid>https://krack.pages.dev/</guid>
+    </item>
+    <item>
+      <title>Site Analyzer</title>
+      <link>https://krack.pages.dev/site-analyzer</link>
+      <guid>https://krack.pages.dev/site-analyzer</guid>
+    </item>
+    <item>
+      <title>Login</title>
+      <link>https://krack.pages.dev/login</link>
+      <guid>https://krack.pages.dev/login</guid>
+    </item>
+    <item>
+      <title>Register</title>
+      <link>https://krack.pages.dev/register</link>
+      <guid>https://krack.pages.dev/register</guid>
+    </item>
+    <item>
+      <title>Privacy</title>
+      <link>https://krack.pages.dev/privacy</link>
+      <guid>https://krack.pages.dev/privacy</guid>
+    </item>
+    <item>
+      <title>Forgot Password</title>
+      <link>https://krack.pages.dev/forgot-password</link>
+      <guid>https://krack.pages.dev/forgot-password</guid>
+    </item>
+  </channel>
+</rss>
