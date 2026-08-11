@@ -23,7 +23,7 @@ export async function onRequestPost(context) {
         return jsonError('بيانات الطلب غير صحيحة.', 400);
     }
 
-    const { url, email } = body;
+    const { url, email, deepScan, extraUrls } = body;
     if (!url || !isValidUrl(url)) {
         return jsonError('من فضلك أدخل رابط صحيح يبدأ بـ http:// أو https://', 400);
     }
@@ -33,10 +33,11 @@ export async function onRequestPost(context) {
         return jsonError('لازم تسجّل دخول الأول عشان تقدر تستخدم الأداة.', 401);
     }
 
-    const userExists = await env.DB.prepare("SELECT id FROM users WHERE email = ?").bind(email).first();
+    const userExists = await env.DB.prepare("SELECT id, is_pro FROM users WHERE email = ?").bind(email).first();
     if (!userExists) {
         return jsonError('الحساب ده مش موجود، سجّل دخول تاني.', 401);
     }
+    const isPro = !!userExists.is_pro;
 
     // المعرّف: الإيميل بس (تسجيل الدخول إجباري دلوقتي)
     const identifier = email;
@@ -49,13 +50,15 @@ export async function onRequestPost(context) {
         });
     }
 
-    // 2) تحقق من الحد اليومي (3 فحوصات فقط، الكاش مبيتحسبش منها)
-    const limitCheck = await checkAndIncrementLimit(env, identifier);
-    if (!limitCheck.allowed) {
-        return jsonError(
-            `وصلت للحد الأقصى (3 فحوصات في اليوم). حاول تاني بكرة، أو جرب رابط فحصته قبل كده هيرجع من الكاش فوراً.`,
-            429
-        );
+    // 2) تحقق من الحد اليومي (3 فحوصات فقط للمجانيين، غير محدود للمشتركين Pro)
+    if (!isPro) {
+        const limitCheck = await checkAndIncrementLimit(env, identifier);
+        if (!limitCheck.allowed) {
+            return jsonError(
+                `وصلت للحد الأقصى (3 فحوصات في اليوم). حاول تاني بكرة، أو جرب رابط فحصته قبل كده هيرجع من الكاش فوراً.`,
+                429
+            );
+        }
     }
 
     const apiKey = env.EXT_TOKEN_MAIN;
@@ -84,15 +87,35 @@ export async function onRequestPost(context) {
         // السكور النهائي = 0 فوري لو الموقع مصنّف خبيث، وإلا سكور إعدادات الأمان الفعلية
         const safety = buildFinalSecurity(malwareCheck, securityConfig);
 
-        // 2.5) فحص الملفات الحساسة المكشوفة — بس لو الدومين متحقق من ملكيته لنفس الحساب
+        // 2.5) الفحص العميق — بس لو المستخدم Pro، طالب فحص عميق صراحةً، والدومين متحقق من ملكيته
         const domain = new URL(url).hostname;
         const isOwnershipVerified = await checkOwnershipVerified(env, identifier, domain);
         let exposedFilesResult = null;
-        if (isOwnershipVerified) {
+        let secretsResult = null;
+        let authRiskResult = null;
+
+        if (isPro && deepScan && isOwnershipVerified) {
+            // أ) ملفات حساسة مكشوفة (.env, .git, إلخ)
             exposedFilesResult = await checkExposedFiles(url);
             if (exposedFilesResult.issues.length > 0) {
                 safety.score = Math.max(0, safety.score - exposedFilesResult.issues.length * 15);
                 safety.issues = [...(safety.issues || []), ...exposedFilesResult.issues];
+            }
+
+            // ب) تسريب أسرار في كود JS (روابط قواعد بيانات، مفاتيح API، باسوردات صريحة)
+            if (securityConfig?.html) {
+                secretsResult = await checkExposedSecrets(securityConfig.html, new URL(securityConfig.checkedUrl).origin);
+                if (secretsResult.issues.length > 0) {
+                    safety.score = Math.max(0, safety.score - secretsResult.issues.length * 20);
+                    safety.issues = [...(safety.issues || []), ...secretsResult.issues];
+                }
+
+                // ج) فحص استدلالي: صلاحيات أدمن بتتفحص في المتصفح بس؟
+                authRiskResult = checkClientSideAuthRisk(securityConfig.html);
+                if (authRiskResult) {
+                    safety.score = Math.max(0, safety.score - 10);
+                    safety.issues = [...(safety.issues || []), authRiskResult];
+                }
             }
         }
 
@@ -102,10 +125,35 @@ export async function onRequestPost(context) {
             ...(desktop?.actionableAudits || []).map(a => ({ ...a, device: 'desktop' })),
             ...(securityConfig?.issues || []).map(a => ({ ...a, device: 'security' })),
             ...(exposedFilesResult?.issues || []).map(a => ({ ...a, device: 'security' })),
+            ...(secretsResult?.issues || []).map(a => ({ ...a, device: 'security' })),
+            ...(authRiskResult ? [{ ...authRiskResult, device: 'security' }] : []),
             ...(geo?.issues || []).map(a => ({ ...a, device: 'geo' }))
         ];
 
-        const aiRecommendations = await generateAIRecommendations(env, url, allAudits, safety, seo, realUserData);
+        const aiRecommendations = await generateAIRecommendations(env, url, allAudits, safety, seo, realUserData, isPro);
+
+        // 2.7) فحص صفحات إضافية من نفس الموقع (بس لمشتركي Pro) — فحص خفيف: أمان + SEO أساسي بس
+        // (من غير PageSpeed كامل لكل صفحة، عشان الوقت والتكلفة، الصفحة الرئيسية بس بتاخد الفحص الكامل)
+        let additionalPages = null;
+        if (isPro && Array.isArray(extraUrls) && extraUrls.length > 0) {
+            const limitedUrls = extraUrls.filter(isValidUrl).slice(0, 5); // حد أقصى 5 صفحات إضافية في المرة
+            const pageChecks = await Promise.allSettled(
+                limitedUrls.map(async (pageUrl) => {
+                    const [pageSecurity, pageSeo] = await Promise.allSettled([
+                        analyzeSecurityConfig(pageUrl),
+                        fetchAndParsePage(pageUrl)
+                    ]);
+                    return {
+                        url: pageUrl,
+                        security: pageSecurity.status === 'fulfilled'
+                            ? { ...pageSecurity.value, html: undefined } // منسربش الـ HTML الكامل في الرد
+                            : null,
+                        seo: pageSeo.status === 'fulfilled' ? pageSeo.value : null
+                    };
+                })
+            );
+            additionalPages = pageChecks.map(r => r.status === 'fulfilled' ? r.value : null).filter(Boolean);
+        }
 
         // 3) قارن بآخر فحص سابق لنفس الرابط ونفس الحساب/IP
         const comparison = await getComparison(env, identifier, url, mobile?.performanceScore, mobile?.seoScore);
@@ -117,9 +165,15 @@ export async function onRequestPost(context) {
             mobile: mobile ? stripAudits(mobile) : null,
             desktop: desktop ? stripAudits(desktop) : null,
             safety,
-            deepScan: { ownershipVerified: isOwnershipVerified, exposedFiles: exposedFilesResult },
+            deepScan: {
+                ownershipVerified: isOwnershipVerified,
+                exposedFiles: exposedFilesResult,
+                exposedSecrets: secretsResult,
+                authRisk: authRiskResult
+            },
             seo,
             geo,
+            additionalPages,
             realUserData,
             aiRecommendations,
             comparison
@@ -433,6 +487,7 @@ async function analyzeSecurityConfig(url) {
     const headers = res.headers;
     const finalUrl = res.url || url;
     const isHttps = finalUrl.startsWith('https://');
+    const origin = new URL(finalUrl).origin;
     const html = await res.text().catch(() => '');
 
     const issues = [];
@@ -543,12 +598,19 @@ async function analyzeSecurityConfig(url) {
         });
     }
 
+    // 10) تسريب أسرار في كود الصفحة أو ملفات JS المرتبطة بيها (روابط قواعد بيانات، مفاتيح API، باسوردات)
+    // ده فحص "سلبي" بحت: بيقرا بس محتوى ملفات JS العامة اللي المتصفح أصلاً بيحمّلها لأي زائر
+    // (يعني أي حد بيفتح "View Page Source" أو DevTools يقدر يشوف نفس الحاجة دي أصلاً)
+    // ملحوظة: تسريب الأسرار في JS وفحص الـ Auth الاستدلالي اتنقلوا للفحص العميق (Pro فقط)
+    // — شوف onRequestPost تحت، بيتشغلوا بس لو isPro && deepScan && الدومين متحقق من ملكيته
+
     score = Math.max(0, Math.round(score));
 
     return {
         score,
         checkedUrl: finalUrl,
         isHttps,
+        html, // بنرجّعه هنا عشان الفحص العميق يستخدمه من غير ما يعمل fetch تاني لنفس الصفحة
         headersChecked: {
             hsts: !!headers.get('strict-transport-security'),
             csp: !!headers.get('content-security-policy'),
@@ -557,6 +619,81 @@ async function analyzeSecurityConfig(url) {
             referrerPolicy: !!headers.get('referrer-policy')
         },
         issues
+    };
+}
+
+// ============================================================
+// كشف أسرار مسرّبة في كود JS العام (روابط DB، مفاتيح API، باسوردات...)
+// فحص سلبي: بيقرا بس ملفات JS اللي المتصفح أصلاً بيحمّلها لأي زائر عادي
+// ============================================================
+const SECRET_PATTERNS = [
+    { regex: /mongodb(?:\+srv)?:\/\/[^\s'"]+/gi, label: 'رابط اتصال MongoDB (فيه يوزر وباسورد)' },
+    { regex: /postgres(?:ql)?:\/\/[^\s'"]+/gi, label: 'رابط اتصال PostgreSQL (فيه يوزر وباسورد)' },
+    { regex: /mysql:\/\/[^\s'"]+/gi, label: 'رابط اتصال MySQL (فيه يوزر وباسورد)' },
+    { regex: /redis:\/\/[^\s'"]+/gi, label: 'رابط اتصال Redis' },
+    { regex: /AKIA[0-9A-Z]{16}/g, label: 'مفتاح AWS Access Key' },
+    { regex: /AIza[0-9A-Za-z_-]{35}/g, label: 'مفتاح Google API' },
+    { regex: /sk_live_[0-9a-zA-Z]{20,}/g, label: 'مفتاح Stripe سرّي (Live)' },
+    { regex: /-----BEGIN (?:RSA |EC )?PRIVATE KEY-----/g, label: 'مفتاح تشفير خاص (Private Key) كامل' },
+    { regex: /["']?(?:db_)?password["']?\s*[:=]\s*["'][^"'\s]{4,}["']/gi, label: 'باسورد مكتوب صريح في الكود' },
+    { regex: /["']?(?:api[_-]?key|secret[_-]?key)["']?\s*[:=]\s*["'][a-zA-Z0-9_-]{16,}["']/gi, label: 'مفتاح API/Secret مكتوب صريح في الكود' }
+];
+
+async function checkExposedSecrets(html, origin) {
+    const issues = [];
+    const foundTypes = new Set();
+
+    // نجمع كل ملفات JS المرتبطة بالصفحة (حد أقصى 8 ملفات، عشان الوقت)
+    const scriptSrcs = [...html.matchAll(/<script[^>]+src=["']([^"']+)["']/gi)]
+        .map(m => m[1])
+        .filter(src => !src.startsWith('http') || src.startsWith(origin)) // ملفات نفس الموقع بس، مش مكتبات خارجية زي jQuery/Google
+        .slice(0, 8);
+
+    const contents = [html]; // نفحص الـ HTML نفسه (فيه inline scripts) زيادة على الملفات
+
+    await Promise.allSettled(scriptSrcs.map(async (src) => {
+        try {
+            const fullUrl = src.startsWith('http') ? src : `${origin}${src.startsWith('/') ? '' : '/'}${src}`;
+            const res = await fetch(fullUrl, { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; SuperWebBot/1.0)' } });
+            if (res.ok) contents.push(await res.text());
+        } catch { /* تجاهل ملف مش قادر يتحمّل */ }
+    }));
+
+    const fullText = contents.join('\n');
+
+    for (const { regex, label } of SECRET_PATTERNS) {
+        if (foundTypes.has(label)) continue;
+        if (regex.test(fullText)) {
+            foundTypes.add(label);
+            issues.push({
+                id: `exposed-secret-${label.replace(/[^a-z0-9]/gi, '-')}`,
+                title: `تسريب محتمل: ${label}`,
+                description: `لقينا نمط يشبه "${label}" ظاهر في كود JS اللي بيتحمّل لأي زائر للموقع. لو ده فعلاً بيانات حقيقية، غيّرها فورًا وانقلها لمتغيرات بيئة على السيرفر (مش في كود العميل خالص).`,
+                score: 0.35
+            });
+        }
+    }
+
+    return { issues };
+}
+
+// ============================================================
+// فحص استدلالي: أنماط كود بتوحي إن فحص الصلاحيات (زي أدمن) بيحصل في المتصفح بس
+// ============================================================
+function checkClientSideAuthRisk(html) {
+    const riskyPatterns = [
+        /localStorage\.getItem\(['"](?:is_?admin|role|permission)['"]\)/i,
+        /if\s*\(\s*(?:user\.)?(?:is_?admin|role)\s*===?\s*['"]admin['"]\s*\)/i
+    ];
+
+    const matched = riskyPatterns.some(p => p.test(html));
+    if (!matched) return null;
+
+    return {
+        id: 'client-side-auth-risk',
+        title: 'احتمال إن صلاحيات مهمة (زي أدمن) بتتفحص في كود المتصفح بس',
+        description: 'لقينا نمط في الكود بيشبه "لو role == admin اظهر الميزة دي" بيتنفذ في الجافاسكريبت. ده مش خطر في حد ذاته لو السيرفر برضو بيرفض أي طلب من غير صلاحية حقيقية — لكن لو السيرفر بيثق في القيمة الجاية من المتصفح من غير ما يتأكد منها تاني، أي حد يقدر يفتح Console ويغيّر القيمة دي يدوي ويوصل لميزات مش مفروض يشوفها. راجع كل endpoint حساس في الباك إند وتأكد إنه بيتحقق من الصلاحية بنفسه، مش بس بياخد كلام المتصفح على إنه صح.',
+        score: 0.15
     };
 }
 
@@ -591,7 +728,7 @@ function buildFinalSecurity(malwareCheck, securityConfig) {
 async function checkOwnershipVerified(env, identifier, domain) {
     try {
         const row = await env.DB.prepare(
-            "SELECT verified FROM site_verifications WHERE identifier = ? AND domain = ?"
+            "SELECT verified FROM site_verifications WHERE identifier = ? AND domain = ? AND active = 1"
         ).bind(identifier, domain).first();
         return !!row?.verified;
     } catch {
@@ -806,20 +943,30 @@ function extractAttr(html, regex) {
 
 // ============================================================
 // تدوير مفاتيح Gemini (Round-Robin عبر D1)
+// مجمّعين منفصلين: مجاني (GEMINI_API_KEY..4) وPro (GEMINI_API_KEY_PRO1..5)
+// عشان ضغط المستخدمين المجانيين ميأثرش على جودة خدمة المشتركين المدفوعين
 // ============================================================
-function getGeminiKeys(env) {
-    return [env.GEMINI_API_KEY, env.GEMINI_API_KEY2, env.GEMINI_API_KEY3, env.GEMINI_API_KEY4]
+function getGeminiKeys(env, isPro) {
+    const proKeys = [env.GEMINI_API_KEY_PRO1, env.GEMINI_API_KEY_PRO2, env.GEMINI_API_KEY_PRO3, env.GEMINI_API_KEY_PRO4, env.GEMINI_API_KEY_PRO5]
+        .map((key, i) => ({ key, index: `pro-${i + 1}` }))
+        .filter(k => !!k.key);
+
+    const freeKeys = [env.GEMINI_API_KEY, env.GEMINI_API_KEY2, env.GEMINI_API_KEY3, env.GEMINI_API_KEY4]
         .map((key, i) => ({ key, index: i + 1 }))
         .filter(k => !!k.key);
+
+    // لو مشترك Pro ومفيش مفاتيح Pro مربوطة أصلاً، يرجع لمفاتيح المجاني كـ fallback بدل ما يفشل الطلب
+    if (isPro) return proKeys.length > 0 ? proKeys : freeKeys;
+    return freeKeys;
 }
 
-async function getStartIndex(env, totalKeys) {
+async function getStartIndex(env, totalKeys, counterId) {
     if (!env.DB || totalKeys <= 1) return 0;
 
     try {
         const row = await env.DB.prepare(
-            `UPDATE api_key_rotation SET counter = (counter + 1) % ? WHERE id = 1 RETURNING counter`
-        ).bind(totalKeys).first();
+            `UPDATE api_key_rotation SET counter = (counter + 1) % ? WHERE id = ? RETURNING counter`
+        ).bind(totalKeys, counterId).first();
 
         return row ? row.counter : 0;
     } catch {
@@ -831,15 +978,16 @@ async function getStartIndex(env, totalKeys) {
 // ============================================================
 // توصيات الذكاء الاصطناعي (Gemini API) — مع تدوير مفاتيح وFallback
 // ============================================================
-async function generateAIRecommendations(env, url, audits, safety, seo, realUserData) {
-    const keys = getGeminiKeys(env);
+async function generateAIRecommendations(env, url, audits, safety, seo, realUserData, isPro) {
+    const keys = getGeminiKeys(env, isPro);
 
     if (keys.length === 0) {
         return fallbackRecommendations('مفيش أي مفتاح Gemini مربوط بالمشروع.');
     }
 
     const prompt = buildPrompt(url, audits, safety, seo, realUserData);
-    const startIndex = await getStartIndex(env, keys.length);
+    // عداد تدوير منفصل لكل مجمّع (id=1 للمجاني، id=2 للـ Pro) عشان محدش يأثر على دور التاني
+    const startIndex = await getStartIndex(env, keys.length, isPro ? 2 : 1);
 
     // نجرب كل مفتاح بالترتيب بدءاً من دوره، ولو خلّص كوتته ننتقل للتالي تلقائياً
     for (let attempt = 0; attempt < keys.length; attempt++) {

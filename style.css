@@ -1636,3 +1636,212 @@ a:hover {
     border-color: #BBF7D0;
 }
 
+
+/* ==========================================================================
+   محلل المواقع Pro — قفل الاشتراك + التحقق من الملكية + فحص متعدد الصفحات
+   ========================================================================== */
+
+.pro-lock-box {
+    background-color: #FFFBEB;
+    border: 1px solid #FDE68A;
+    border-radius: var(--radius-sm);
+    padding: 1.5rem;
+    text-align: center;
+    margin-top: 1rem;
+}
+
+.pro-lock-box h3 {
+    margin: 0 0 0.5rem;
+}
+
+.ownership-verify-box {
+    background-color: #fafafa;
+    border: 1px solid #eee;
+    border-radius: var(--radius-sm);
+    padding: 1.25rem;
+    margin: 1rem 0;
+}
+
+.ownership-verify-box h3 {
+    margin: 0 0 0.5rem;
+}
+
+.ownership-note {
+    font-size: 0.82rem;
+    color: var(--text-muted);
+}
+
+.ownership-step {
+    margin-top: 0.8rem;
+}
+
+.code-display {
+    background-color: #1e1e2e;
+    color: #a6e3a1;
+    padding: 0.7rem 1rem;
+    border-radius: var(--radius-sm);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.85rem;
+    overflow-x: auto;
+    direction: ltr;
+    text-align: left;
+}
+
+.btn-secondary {
+    padding: 0.6rem 1.2rem;
+    background-color: #fff;
+    color: var(--primary-color);
+    border: 1.5px solid var(--primary-color);
+    border-radius: var(--radius-sm);
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.btn-secondary:hover {
+    background-color: #f5f3ff;
+}
+
+.deep-scan-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+    margin-top: 0.8rem;
+    cursor: pointer;
+}
+
+.multi-page-box {
+    margin-top: 0.8rem;
+}
+
+.analyzer-textarea {
+    width: 100%;
+    padding: 0.7rem;
+    border: 1px solid #ddd;
+    border-radius: var(--radius-sm);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.82rem;
+    resize: vertical;
+    box-sizing: border-box;
+}
+
+/* ==========================================================================
+   نافذة تحويل مشتركي Pro
+   ========================================================================== */
+
+.pro-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background-color: rgba(0, 0, 0, 0.55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    padding: 1rem;
+}
+
+.pro-modal-box {
+    background-color: #fff;
+    border-radius: var(--radius-md, 12px);
+    padding: 1.75rem;
+    max-width: 400px;
+    width: 100%;
+    text-align: center;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.25);
+}
+
+.pro-modal-box h3 {
+    margin: 0 0 0.6rem;
+}
+
+.pro-modal-box p {
+    color: var(--text-muted);
+    margin: 0 0 1.25rem;
+    font-size: 0.9rem;
+}
+
+.pro-modal-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+}
+
+/* ==========================================================================
+   مواقعي (My Sites)
+   ========================================================================== */
+
+.my-sites-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin: 0.8rem 0;
+}
+
+.my-site-row {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    background-color: #fafafa;
+    border: 1px solid #eee;
+    border-radius: var(--radius-sm);
+    padding: 0.6rem 0.8rem;
+    font-size: 0.85rem;
+    flex-wrap: wrap;
+}
+
+.my-site-domain {
+    font-weight: 700;
+    font-family: 'JetBrains Mono', monospace;
+    direction: ltr;
+}
+
+.my-site-badge {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    background-color: #eee;
+    padding: 0.15rem 0.5rem;
+    border-radius: 999px;
+}
+
+.my-site-use-btn, .my-site-remove-btn {
+    margin-inline-start: auto;
+    padding: 0.35rem 0.8rem;
+    border-radius: var(--radius-sm);
+    font-size: 0.78rem;
+    cursor: pointer;
+    border: 1px solid #ddd;
+    background-color: #fff;
+}
+
+.my-site-use-btn:not(:disabled):hover {
+    border-color: var(--primary-color);
+    color: var(--primary-color);
+}
+
+.my-site-use-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.my-site-remove-btn {
+    color: #dc2626;
+    border-color: #fecaca;
+}
+
+.my-site-remove-btn:hover {
+    background-color: #fef2f2;
+}
+
+.add-site-box {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin-top: 0.8rem;
+}
+
+.add-site-box .analyzer-input {
+    flex: 1;
+    min-width: 200px;
+}

@@ -55,13 +55,149 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!currentUser || !currentUser.email) {
         document.getElementById('analyzer-input-section').style.display = 'none';
         document.getElementById('login-required-box').style.display = 'block';
-        return; // منوقفش أي Listeners تانية، الأداة كلها متعطلة لغير المسجلين
+        return;
     }
 
-    // مشترك Pro؟ نعرضله نافذة تحويل للنسخة المحسّنة على طول
-    if (currentUser.is_pro) {
-        showProRedirectModal();
+    // الصفحة دي لمشتركي Pro بس — حتى لو الرابط اتسرب، محدش يقدر يستخدمها من غير اشتراك فعلي
+    if (!currentUser.is_pro) {
+        document.getElementById('analyzer-input-section').style.display = 'none';
+        document.getElementById('my-sites-box').style.display = 'none';
+        document.getElementById('pro-lock-box').style.display = 'block';
+        return;
     }
+
+    // ============ إدارة "مواقعي" ============
+    document.getElementById('my-sites-box').style.display = 'block';
+    let mySites = []; // { domain, verified }
+
+    async function loadMySites() {
+        try {
+            const res = await fetch('/api/verify-site', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'list', email: currentUser.email })
+            });
+            const data = await res.json();
+            mySites = data.sites || [];
+            renderMySites();
+        } catch (err) {
+            console.error('تعذّر تحميل مواقعي:', err);
+        }
+    }
+
+    function renderMySites() {
+        const listEl = document.getElementById('my-sites-list');
+        if (mySites.length === 0) {
+            listEl.innerHTML = `<p class="ownership-note">لسه مفيش مواقع مضافة.</p>`;
+            return;
+        }
+        listEl.innerHTML = mySites.map(site => `
+            <div class="my-site-row" data-domain="${site.domain}">
+                <span class="my-site-status">${site.verified ? '✅' : '⏳'}</span>
+                <span class="my-site-domain">${site.domain}</span>
+                <span class="my-site-badge">${site.verified ? 'متحقق منه' : 'قيد التحقق'}</span>
+                <button type="button" class="my-site-use-btn" data-domain="${site.domain}" ${site.verified ? '' : 'disabled'}>استخدام</button>
+                <button type="button" class="my-site-remove-btn" data-domain="${site.domain}">حذف</button>
+            </div>
+        `).join('');
+
+        listEl.querySelectorAll('.my-site-use-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const domain = btn.dataset.domain;
+                document.getElementById('analyze-url').value = `https://${domain}`;
+                syncDeepScanAvailability();
+            });
+        });
+
+        listEl.querySelectorAll('.my-site-remove-btn').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const domain = btn.dataset.domain;
+                if (!confirm(`لو مسحت ${domain}، لازم تتحقق من ملكيته تاني من الصفر لو عايز تستخدمه. متأكد؟`)) return;
+                try {
+                    await fetch('/api/verify-site', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ action: 'remove', url: `https://${domain}`, email: currentUser.email })
+                    });
+                    await loadMySites();
+                    syncDeepScanAvailability();
+                } catch (err) {
+                    alert('تعذّر الحذف: ' + err.message);
+                }
+            });
+        });
+    }
+
+    // فحص الأمان العميق يتفعّل بس لو الرابط المكتوب دلوقتي يطابق دومين متحقق منه فعلاً
+    function syncDeepScanAvailability() {
+        const urlVal = document.getElementById('analyze-url').value.trim();
+        const checkbox = document.getElementById('deep-scan-checkbox');
+        const label = document.getElementById('deep-scan-label');
+        let domain = null;
+        try { domain = new URL(urlVal).hostname; } catch { /* رابط ناقص لسه */ }
+
+        const matched = domain && mySites.find(s => s.domain === domain && s.verified);
+        if (matched) {
+            checkbox.disabled = false;
+            label.textContent = `فحص أمان عميق (الثغرات) — متاح لـ ${domain}`;
+        } else {
+            checkbox.disabled = true;
+            checkbox.checked = false;
+            label.textContent = 'فحص أمان عميق (الثغرات) — اختار موقع متحقق منه من "مواقعي" الأول';
+        }
+    }
+
+    document.getElementById('analyze-url').addEventListener('input', syncDeepScanAvailability);
+
+    document.getElementById('add-site-btn').addEventListener('click', async () => {
+        const url = document.getElementById('new-site-url').value.trim();
+        if (!url) { alert('اكتب رابط الموقع الأول'); return; }
+        try {
+            const res = await fetch('/api/verify-site', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'generate', url, email: currentUser.email })
+            });
+            const data = await res.json();
+            if (!res.ok || data.error) {
+                alert(data.error || 'حصل خطأ');
+                return;
+            }
+            document.getElementById('ownership-token-display').textContent = data.token;
+            document.getElementById('ownership-file-url').textContent = data.filePath;
+            document.getElementById('ownership-step-instructions').style.display = 'block';
+            document.getElementById('ownership-step-instructions').dataset.pendingUrl = url;
+            document.getElementById('ownership-status').textContent = data.verified ? '✅ متحقق منه بالفعل' : '';
+            await loadMySites();
+        } catch (err) {
+            alert('تعذّر توليد كود التحقق: ' + err.message);
+        }
+    });
+
+    document.getElementById('check-verify-btn').addEventListener('click', async () => {
+        const url = document.getElementById('ownership-step-instructions').dataset.pendingUrl;
+        const statusEl = document.getElementById('ownership-status');
+        if (!url) { statusEl.textContent = '❌ اعمل خطوة الإضافة الأول'; return; }
+        statusEl.textContent = 'بنتحقق...';
+        try {
+            const res = await fetch('/api/verify-site', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'check', url, email: currentUser.email })
+            });
+            const data = await res.json();
+            if (data.verified) {
+                statusEl.textContent = '✅ تم التحقق من ملكية الدومين بنجاح';
+                await loadMySites();
+            } else {
+                statusEl.textContent = '❌ ' + (data.reason || 'مش لاقيين الملف، تأكد إنك رفعته صح');
+            }
+        } catch (err) {
+            statusEl.textContent = '❌ تعذّر التحقق: ' + err.message;
+        }
+    });
+
+    loadMySites();
 
     form.addEventListener('submit', async (e) => {
         e.preventDefault();
@@ -74,6 +210,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const results = document.getElementById('analyze-results');
         const user = getCurrentUser();
 
+        const deepScan = document.getElementById('deep-scan-checkbox')?.checked || false;
+        const extraUrls = (document.getElementById('extra-urls')?.value || '')
+            .split('\n')
+            .map(u => u.trim())
+            .filter(Boolean);
+
         btn.disabled = true;
         loading.style.display = 'flex';
         results.style.display = 'none';
@@ -83,17 +225,13 @@ document.addEventListener('DOMContentLoaded', () => {
             const res = await fetch('/api/analyze', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ url, email: user?.email || null })
+                body: JSON.stringify({ url, email: user?.email || null, deepScan, extraUrls })
             });
 
             const data = await res.json();
 
             if (!res.ok || data.error) {
-                if (res.status === 429) {
-                    alert(data.error || 'وصلت للحد الأقصى من الفحوصات اليوم (3 فحوصات). حاول تاني بكرة.');
-                } else {
-                    alert(data.error || 'حصل خطأ أثناء الفحص');
-                }
+                alert(data.error || 'حصل خطأ أثناء الفحص');
                 return;
             }
 
@@ -651,30 +789,4 @@ function toggleDriveUI(connected) {
 
     notConnected.style.display = connected ? 'none' : 'block';
     connectedBox.style.display = connected ? 'block' : 'none';
-}
-
-// ============================================================
-// نافذة تحويل مشتركي Pro للنسخة المحسّنة (تظهر تلقائي كل ما يدخلوا النسخة المجانية)
-// ============================================================
-function showProRedirectModal() {
-    const overlay = document.createElement('div');
-    overlay.className = 'pro-modal-overlay';
-    overlay.innerHTML = `
-        <div class="pro-modal-box">
-            <h3>🎉 إنت مشترك في النسخة المحسّنة</h3>
-            <p>عندك فحوصات غير محدودة وميزات أمان إضافية في محلل المواقع Pro.</p>
-            <div class="pro-modal-actions">
-                <button type="button" id="pro-modal-go" class="btn-primary">روح للنسخة المحسّنة</button>
-                <button type="button" id="pro-modal-stay" class="btn-secondary">استمر هنا (النسخة العادية)</button>
-            </div>
-        </div>
-    `;
-    document.body.appendChild(overlay);
-
-    document.getElementById('pro-modal-go').addEventListener('click', () => {
-        window.location.href = '/site-analyzer-honorable.html';
-    });
-    document.getElementById('pro-modal-stay').addEventListener('click', () => {
-        overlay.remove();
-    });
 }
