@@ -5,5 +5,4 @@ Disallow: /register.html
 Disallow: /forgot-password.html
 Disallow: /api/
 
-Sitemap: https://krack.pages.dev/sitemap.txt
 Sitemap: https://krack.pages.dev/sitemap.xml

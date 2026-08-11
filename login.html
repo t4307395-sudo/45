@@ -7,9 +7,6 @@
     <meta name="robots" content="noindex, follow">
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%237C3AED'/%3E%3Ctext x='50' y='68' font-size='55' font-family='Arial' font-weight='bold' fill='white' text-anchor='middle'%3ESW%3C/text%3E%3C/svg%3E">
 
-    <!-- مكتبة Google Identity Services (تُستدعى مرة واحدة فقط) -->
-    <script src="https://accounts.google.com/gsi/client" async defer></script>
-    
     <!-- ربط ملف CSS -->
     <link rel="stylesheet" href="style.css">
 </head>
@@ -83,8 +80,11 @@
         </section>
     </main>
 
-    <!-- ربط ملف الـ JavaScript المنفصل -->
+    <!-- ربط ملف الـ JavaScript المنفصل الأول، عشان window.handleGoogleLogin يتعرّف قبل ما مكتبة جوجل تدوّر عليه -->
     <script src="script.js" defer></script>
+
+    <!-- مكتبة Google Identity Services — لازم تتحمّل بعد script.js بالظبط (بدون async) -->
+    <script src="https://accounts.google.com/gsi/client" defer></script>
 
 </body>
 </html>
