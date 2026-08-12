@@ -71,27 +71,40 @@
                     <p id="pro-lock-message">حسابك الحالي مش مفعّل عليه اشتراك Pro. تواصل معانا لتفعيل الاشتراك.</p>
                 </section>
 
-                <!-- ============ مواقعي (قائمة المواقع المتحقق من ملكيتها) ============ -->
+                <!-- ============ مواقعي — زرار يفتح نافذة منبثقة بدل قسم دايمًا مفتوح ============ -->
                 <section class="my-sites-box" id="my-sites-box" style="display:none;">
-                    <h3>مواقعي</h3>
-                    <p class="ownership-note">الموقع لازم يكون متحقق من ملكيته عشان تقدر تعمل عليه فحص أمان عميق (ثغرات).</p>
-
-                    <div id="my-sites-list" class="my-sites-list"><!-- بيتولد ديناميكياً --></div>
-
-                    <div class="add-site-box">
-                        <input type="url" id="new-site-url" class="analyzer-input" placeholder="https://موقعك.com">
-                        <button type="button" id="add-site-btn" class="btn-secondary">إضافة والتحقق من الملكية</button>
-                    </div>
-
-                    <!-- خطوات التحقق (تظهر بعد الضغط على "إضافة") -->
-                    <div class="ownership-step" id="ownership-step-instructions" style="display:none;">
-                        <p>اعمل ملف اسمه <code>superweb-verify.txt</code> في جذر موقعك، وحط جواه الكود ده بالظبط:</p>
-                        <pre id="ownership-token-display" class="code-display"></pre>
-                        <p class="ownership-note">لازم يكون متاح على: <code id="ownership-file-url"></code></p>
-                        <button type="button" id="check-verify-btn" class="btn-primary">تحقق الآن</button>
-                        <span id="ownership-status"></span>
-                    </div>
+                    <button type="button" id="open-my-sites-btn" class="btn-secondary my-sites-open-btn">
+                        🌐 مواقعي <span id="my-sites-count-badge" class="my-sites-count-badge"></span>
+                    </button>
+                    <p id="my-sites-selected-hint" class="ownership-note"></p>
                 </section>
+
+                <!-- نافذة منبثقة: إدارة مواقعي (قائمة + إضافة + تحقق) -->
+                <div class="my-sites-modal-overlay" id="my-sites-modal-overlay" style="display:none;">
+                    <div class="my-sites-modal-box">
+                        <div class="my-sites-modal-header">
+                            <h3>مواقعي</h3>
+                            <button type="button" id="close-my-sites-modal" class="modal-close-btn">✕</button>
+                        </div>
+                        <p class="ownership-note">الموقع لازم يكون متحقق من ملكيته عشان تقدر تعمل عليه فحص أمان عميق (ثغرات).</p>
+
+                        <div id="my-sites-list" class="my-sites-list"><!-- بيتولد ديناميكياً --></div>
+
+                        <div class="add-site-box">
+                            <input type="url" id="new-site-url" class="analyzer-input" placeholder="https://موقعك.com">
+                            <button type="button" id="add-site-btn" class="btn-secondary">إضافة والتحقق من الملكية</button>
+                        </div>
+
+                        <!-- خطوات التحقق (تظهر بعد الضغط على "إضافة") -->
+                        <div class="ownership-step" id="ownership-step-instructions" style="display:none;">
+                            <p>اعمل ملف اسمه <code>superweb-verify.txt</code> في جذر موقعك، وحط جواه الكود ده بالظبط:</p>
+                            <pre id="ownership-token-display" class="code-display"></pre>
+                            <p class="ownership-note">لازم يكون متاح على: <code id="ownership-file-url"></code></p>
+                            <button type="button" id="check-verify-btn" class="btn-primary">تحقق الآن</button>
+                            <span id="ownership-status"></span>
+                        </div>
+                    </div>
+                </div>
 
                 <!-- ============ فورم الفحص (يظهر بس لو مسجل دخول ومشترك Pro) ============ -->
                 <section class="analyzer-input-section" id="analyzer-input-section">
@@ -109,16 +122,44 @@
                         </button>
                     </form>
 
-                    <label class="deep-scan-toggle">
-                        <input type="checkbox" id="deep-scan-checkbox" disabled>
-                        <span id="deep-scan-label">فحص أمان عميق (ملفات مكشوفة + تسريب أسرار في JS + فحص صلاحيات) — اختار موقع متحقق منه من "مواقعي" الأول</span>
-                    </label>
+                    <div class="deep-scan-box" id="deep-scan-box">
+                        <label class="deep-scan-toggle">
+                            <input type="checkbox" id="deep-scan-checkbox" disabled>
+                            <span class="deep-scan-toggle-title">فحص أمان عميق</span>
+                        </label>
+                        <p id="deep-scan-label" class="deep-scan-status deep-scan-status--off">🔒 غير متاح — اختار موقع متحقق منه من "مواقعي" الأول</p>
+                    </div>
 
                     <div class="multi-page-box">
                         <p class="ownership-note">فحص صفحات إضافية من نفس الموقع (اختياري، سطر لكل رابط):</p>
                         <textarea id="extra-urls" class="analyzer-textarea" placeholder="https://example.com/page2&#10;https://example.com/page3" rows="3"></textarea>
                     </div>
                 </section>
+
+                <!-- ============ تحليل المنافسين (أداة مستقلة، Pro) ============ -->
+                <section class="competitor-box" id="competitor-box" style="display:none;">
+                    <button type="button" id="open-competitor-btn" class="btn-secondary">⚔️ تحليل منافس</button>
+                </section>
+
+                <div class="my-sites-modal-overlay" id="competitor-modal-overlay" style="display:none;">
+                    <div class="my-sites-modal-box">
+                        <div class="my-sites-modal-header">
+                            <h3>تحليل منافسين</h3>
+                            <button type="button" id="close-competitor-modal" class="modal-close-btn">✕</button>
+                        </div>
+                        <p class="ownership-note">هنفحص الموقعين ونديك نصايح لموقعك إنت بس — إزاي تتفوق على المنافس.</p>
+
+                        <label class="ownership-note" for="competitor-my-url">رابط موقعك</label>
+                        <input type="url" id="competitor-my-url" class="analyzer-input" placeholder="https://موقعك.com">
+
+                        <label class="ownership-note" for="competitor-url" style="margin-top:0.6rem; display:block;">رابط المنافس</label>
+                        <input type="url" id="competitor-url" class="analyzer-input" placeholder="https://المنافس.com">
+
+                        <button type="button" id="run-competitor-btn" class="btn-primary" style="margin-top:0.8rem;">قارن الآن</button>
+
+                        <div id="competitor-result" class="competitor-result" style="display:none;"></div>
+                    </div>
+                </div>
 
                 <!-- ============ رسالة تسجيل الدخول الإجباري ============ -->
                 <section class="login-required-box" id="login-required-box" style="display:none;">
@@ -187,6 +228,19 @@
                     <div class="result-block" id="geo-card">
                         <h3>الظهور في محركات الذكاء الاصطناعي (GEO)</h3>
                         <div id="geo-details-grid" class="seo-details-grid"></div>
+                    </div>
+
+                    <!-- نتائج الفحص العميق (يظهر بس لو الفحص العميق كان مفعّل) -->
+                    <div class="result-block" id="deep-scan-results-card" style="display:none;">
+                        <h3>🔍 نتائج الفحص العميق (Pro)</h3>
+                        <p class="ownership-note">كل حاجة اتفحصت فعليًا، حتى اللي طلعت نضيفة — عشان تعرف بالظبط إحنا فحصنا إيه.</p>
+                        <div id="deep-scan-results-grid" class="seo-details-grid"></div>
+                    </div>
+
+                    <!-- تطور الأداء عبر الوقت (رسم بياني بسيط، Pro) -->
+                    <div class="result-block" id="trend-chart-card" style="display:none;">
+                        <h3>📈 تطور الأداء والـ SEO عبر الوقت</h3>
+                        <div id="trend-chart-container"></div>
                     </div>
 
                     <!-- الحلول المقترحة -->

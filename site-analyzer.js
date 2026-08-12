@@ -61,6 +61,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // مشترك Pro؟ نعرضله نافذة تحويل للنسخة المحسّنة على طول
     if (currentUser.is_pro) {
         showProRedirectModal();
+    } else {
+        showProPromoCard(); // مش مشترك؟ نعرضله بطاقة تعريفية بسيطة بميزات Pro (قابلة للإغلاق)
     }
 
     form.addEventListener('submit', async (e) => {
@@ -676,5 +678,23 @@ function showProRedirectModal() {
     });
     document.getElementById('pro-modal-stay').addEventListener('click', () => {
         overlay.remove();
+    });
+}
+
+// ============================================================
+// بطاقة إعلانية بسيطة تعرّف بميزات Pro (بدون زرار اشتراك، قابلة للإغلاق)
+// ============================================================
+function showProPromoCard() {
+    const dismissed = localStorage.getItem('proPromoDismissed');
+    if (dismissed === 'true') return;
+
+    const card = document.getElementById('pro-promo-card');
+    if (!card) return;
+
+    card.style.display = 'block';
+
+    document.getElementById('pro-promo-close').addEventListener('click', () => {
+        card.style.display = 'none';
+        localStorage.setItem('proPromoDismissed', 'true');
     });
 }
