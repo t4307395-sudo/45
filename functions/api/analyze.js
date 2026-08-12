@@ -93,12 +93,8 @@ export async function onRequestPost(context) {
         let exposedFilesResult = null;
         let secretsResult = null;
         let authRiskResult = null;
-        let apiExposureResult = null;
-        let deepScanRan = false;
 
         if (isPro && deepScan && isOwnershipVerified) {
-            deepScanRan = true;
-
             // أ) ملفات حساسة مكشوفة (.env, .git, إلخ)
             exposedFilesResult = await checkExposedFiles(url);
             if (exposedFilesResult.issues.length > 0) {
@@ -108,8 +104,7 @@ export async function onRequestPost(context) {
 
             // ب) تسريب أسرار في كود JS (روابط قواعد بيانات، مفاتيح API، باسوردات صريحة)
             if (securityConfig?.html) {
-                const origin = new URL(securityConfig.checkedUrl).origin;
-                secretsResult = await checkExposedSecrets(securityConfig.html, origin);
+                secretsResult = await checkExposedSecrets(securityConfig.html, new URL(securityConfig.checkedUrl).origin);
                 if (secretsResult.issues.length > 0) {
                     safety.score = Math.max(0, safety.score - secretsResult.issues.length * 20);
                     safety.issues = [...(safety.issues || []), ...secretsResult.issues];
@@ -120,13 +115,6 @@ export async function onRequestPost(context) {
                 if (authRiskResult) {
                     safety.score = Math.max(0, safety.score - 10);
                     safety.issues = [...(safety.issues || []), authRiskResult];
-                }
-
-                // د) Endpoints بترجع بيانات من غير تسجيل دخول (Broken Access Control) — فحص قراءة سلبي بحت
-                apiExposureResult = await checkUnauthenticatedApiExposure(secretsResult.jsText || '', origin);
-                if (apiExposureResult.issues.length > 0) {
-                    safety.score = Math.max(0, safety.score - apiExposureResult.issues.length * 25);
-                    safety.issues = [...(safety.issues || []), ...apiExposureResult.issues];
                 }
             }
         }
@@ -139,7 +127,6 @@ export async function onRequestPost(context) {
             ...(exposedFilesResult?.issues || []).map(a => ({ ...a, device: 'security' })),
             ...(secretsResult?.issues || []).map(a => ({ ...a, device: 'security' })),
             ...(authRiskResult ? [{ ...authRiskResult, device: 'security' }] : []),
-            ...(apiExposureResult?.issues || []).map(a => ({ ...a, device: 'security' })),
             ...(geo?.issues || []).map(a => ({ ...a, device: 'geo' }))
         ];
 
@@ -179,44 +166,10 @@ export async function onRequestPost(context) {
             desktop: desktop ? stripAudits(desktop) : null,
             safety,
             deepScan: {
-                ran: deepScanRan,
                 ownershipVerified: isOwnershipVerified,
-                // "شفافية": قائمة توضح كل حاجة اتفحصت والنتيجة، حتى لو كانت النتيجة "نضيفة"
-                // عشان لو مفيش مشاكل، المستخدم يشوف "اتفحصت وطلعت نضيفة" مش سكوت غامض
-                checks: deepScanRan ? [
-                    {
-                        id: 'exposed-files',
-                        label: 'ملفات حساسة مكشوفة (.env, .git, wp-config.php.bak, إلخ)',
-                        checkedCount: exposedFilesResult?.checkedPaths ?? 0,
-                        foundCount: exposedFilesResult?.issues.length ?? 0,
-                        clean: (exposedFilesResult?.issues.length ?? 0) === 0
-                    },
-                    {
-                        id: 'exposed-secrets',
-                        label: 'تسريب أسرار في كود JS (روابط قواعد بيانات، مفاتيح API، باسوردات)',
-                        checkedCount: SECRET_PATTERNS_COUNT,
-                        foundCount: secretsResult?.issues.length ?? 0,
-                        clean: (secretsResult?.issues.length ?? 0) === 0
-                    },
-                    {
-                        id: 'client-auth-risk',
-                        label: 'فحص استدلالي لصلاحيات العميل (زي فحص أدمن من JS)',
-                        checkedCount: 1,
-                        foundCount: authRiskResult ? 1 : 0,
-                        clean: !authRiskResult
-                    },
-                    {
-                        id: 'api-exposure',
-                        label: 'Endpoints بترجع بيانات من غير تسجيل دخول',
-                        checkedCount: apiExposureResult?.checkedEndpoints ?? 0,
-                        foundCount: apiExposureResult?.issues.length ?? 0,
-                        clean: (apiExposureResult?.issues.length ?? 0) === 0
-                    }
-                ] : [],
                 exposedFiles: exposedFilesResult,
-                exposedSecrets: secretsResult ? { issues: secretsResult.issues } : null, // بدون jsText، ده داخلي بس
-                authRisk: authRiskResult,
-                apiExposure: apiExposureResult
+                exposedSecrets: secretsResult,
+                authRisk: authRiskResult
             },
             seo,
             geo,
@@ -343,7 +296,7 @@ function stripAudits(deviceResult) {
 // ============================================================
 // فحص السرعة (PageSpeed Insights API) — لجهاز واحد (موبايل/ديسكتوب)
 // ============================================================
-export async function fetchPageSpeed(url, apiKey, strategy) {
+async function fetchPageSpeed(url, apiKey, strategy) {
     const endpoint = `https://www.googleapis.com/pagespeedonline/v5/runPagespeed` +
         `?url=${encodeURIComponent(url)}` +
         `&key=${apiKey}` +
@@ -525,7 +478,7 @@ async function fetchSafeBrowsing(url, apiKey) {
 // من غير أي محاولة اختراق أو استغلال ثغرات. نفس أسلوب أدوات معروفة
 // زي securityheaders.com و Mozilla Observatory.
 // ============================================================
-export async function analyzeSecurityConfig(url) {
+async function analyzeSecurityConfig(url) {
     const res = await fetch(url, {
         headers: { 'User-Agent': 'Mozilla/5.0 (compatible; SuperWebBot/1.0; +security-audit)' },
         redirect: 'follow'
@@ -686,8 +639,6 @@ const SECRET_PATTERNS = [
     { regex: /["']?(?:api[_-]?key|secret[_-]?key)["']?\s*[:=]\s*["'][a-zA-Z0-9_-]{16,}["']/gi, label: 'مفتاح API/Secret مكتوب صريح في الكود' }
 ];
 
-const SECRET_PATTERNS_COUNT = SECRET_PATTERNS.length;
-
 async function checkExposedSecrets(html, origin) {
     const issues = [];
     const foundTypes = new Set();
@@ -723,47 +674,7 @@ async function checkExposedSecrets(html, origin) {
         }
     }
 
-    return { issues, jsText: fullText }; // بنرجّع نص كل ملفات JS عشان فحص الـ endpoints يستخدمه من غير ما يعمل تحميل تاني
-}
-
-// ============================================================
-// فحص endpoints بترجع بيانات من غير أي تسجيل دخول (Broken Access Control)
-// فحص "قراءة سلبي بحت": بيبعت طلب GET عادي بالظبط زي أي زائر عادي —
-// مفيش أي بيانات مزيفة أو محاولة تعديل/حذف/إنشاء، بس بيسأل "الرد ده محتاج تسجيل دخول؟"
-// ============================================================
-async function checkUnauthenticatedApiExposure(jsText, origin) {
-    const issues = [];
-
-    // نستخرج مسارات الـ API المذكورة في كود JS (fetch('/api/...'), fetch("/api/..."))
-    const endpointMatches = [...jsText.matchAll(/fetch\(\s*['"`](\/[a-zA-Z0-9\/_-]*(?:api|admin)[a-zA-Z0-9\/_-]*)['"`]/gi)];
-    const uniqueEndpoints = [...new Set(endpointMatches.map(m => m[1]))].slice(0, 10); // حد أقصى 10
-
-    await Promise.allSettled(uniqueEndpoints.map(async (path) => {
-        try {
-            const res = await fetch(`${origin}${path}`, {
-                method: 'GET', // GET بس — قراءة، مفيش أي POST/PUT/DELETE خالص
-                headers: { 'User-Agent': 'Mozilla/5.0 (compatible; SuperWebBot/1.0; +readonly-access-check)' }
-            });
-
-            if (!res.ok) return; // 401/403/404 يعني محمي أو مش موجود بالطريقة دي — تمام، مفيش مشكلة
-
-            const contentType = res.headers.get('content-type') || '';
-            if (!contentType.includes('json')) return;
-
-            const bodyText = await res.text();
-            // لو الرد JSON حقيقي وحجمه معقول (مش رد فاضي {} أو [])، يبقى فيه بيانات فعلاً بترجع من غير حماية
-            if (bodyText.length > 20) {
-                issues.push({
-                    id: `unauthenticated-api-${path.replace(/[^a-z0-9]/gi, '-')}`,
-                    title: `Endpoint بيرجع بيانات من غير تسجيل دخول: ${path}`,
-                    description: `بعتنا طلب GET عادي (من غير أي بيانات تسجيل دخول) على ${path} ورجع بيانات JSON بدل ما يرفض الطلب. لو الـ endpoint ده مفروض يكون لمستخدمين مسجلين بس، تأكد إن السيرفر بيتحقق من التوكين/الجلسة قبل ما يرجّع أي بيانات.`,
-                    score: 0.4
-                });
-            }
-        } catch { /* تجاهل — تعذّر الوصول مش دليل على مشكلة */ }
-    }));
-
-    return { issues, checkedEndpoints: uniqueEndpoints.length };
+    return { issues };
 }
 
 // ============================================================
@@ -875,7 +786,7 @@ async function checkExposedFiles(url) {
 // ============================================================
 // تحليل SEO موسّع (Title, Meta, Headings, Schema, Robots, OG...)
 // ============================================================
-export async function fetchAndParsePage(url) {
+async function fetchAndParsePage(url) {
     const res = await fetch(url, {
         headers: { 'User-Agent': 'Mozilla/5.0 (compatible; SuperWebBot/1.0)' }
     });
@@ -1035,7 +946,7 @@ function extractAttr(html, regex) {
 // مجمّعين منفصلين: مجاني (GEMINI_API_KEY..4) وPro (GEMINI_API_KEY_PRO1..5)
 // عشان ضغط المستخدمين المجانيين ميأثرش على جودة خدمة المشتركين المدفوعين
 // ============================================================
-export function getGeminiKeys(env, isPro) {
+function getGeminiKeys(env, isPro) {
     const proKeys = [env.GEMINI_API_KEY_PRO1, env.GEMINI_API_KEY_PRO2, env.GEMINI_API_KEY_PRO3, env.GEMINI_API_KEY_PRO4, env.GEMINI_API_KEY_PRO5]
         .map((key, i) => ({ key, index: `pro-${i + 1}` }))
         .filter(k => !!k.key);
@@ -1049,7 +960,7 @@ export function getGeminiKeys(env, isPro) {
     return freeKeys;
 }
 
-export async function getStartIndex(env, totalKeys, counterId) {
+async function getStartIndex(env, totalKeys, counterId) {
     if (!env.DB || totalKeys <= 1) return 0;
 
     try {
@@ -1143,7 +1054,7 @@ Lighthouse المعملية كويسة، ده مهم جداً تنبّه علي�
 `.trim();
 }
 
-export async function callGemini(apiKey, prompt) {
+async function callGemini(apiKey, prompt) {
     const res = await fetch(
         'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent',
         {
