@@ -41,6 +41,11 @@
     padding: 0;
 }
 
+html {
+    overflow-x: hidden; /* يمنع أي سحب أفقي بالغلط في الموبايل يكشف عناصر position:fixed مخبّية */
+    width: 100%;
+}
+
 body {
     font-family: var(--font-family);
     background-color: var(--bg-color);
@@ -49,6 +54,8 @@ body {
     min-height: 100vh;
     display: flex;
     flex-direction: column;
+    overflow-x: hidden;
+    width: 100%;
 }
 
 a {
@@ -1795,6 +1802,8 @@ a:hover {
     font-weight: 700;
     font-family: 'JetBrains Mono', monospace;
     direction: ltr;
+    word-break: break-all;
+    max-width: 100%;
 }
 
 .my-site-badge {
@@ -1844,4 +1853,248 @@ a:hover {
 .add-site-box .analyzer-input {
     flex: 1;
     min-width: 200px;
+}
+
+/* ==========================================================================
+   تحذير المتصفح المدمج (In-App Browser)
+   ========================================================================== */
+
+.inapp-browser-warning {
+    background-color: #FEF3C7;
+    color: #92400E;
+    border-bottom: 2px solid #F59E0B;
+    padding: 0.9rem 1.25rem;
+    font-size: 0.85rem;
+    line-height: 1.7;
+    text-align: center;
+}
+
+/* ==========================================================================
+   زرار وشارة "مواقعي" + نافذة منبثقة
+   ========================================================================== */
+
+.my-sites-open-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    width: auto;
+}
+
+.my-sites-count-badge {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.my-sites-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background-color: rgba(0, 0, 0, 0.55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    padding: 1rem;
+}
+
+.my-sites-modal-box {
+    background-color: #fff;
+    border-radius: var(--radius-md, 12px);
+    padding: 1.5rem;
+    max-width: 520px;
+    width: 100%;
+    max-height: 85vh;
+    overflow-y: auto;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.25);
+}
+
+.my-sites-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.5rem;
+}
+
+.my-sites-modal-header h3 {
+    margin: 0;
+}
+
+.modal-close-btn {
+    background: none;
+    border: none;
+    font-size: 1.2rem;
+    cursor: pointer;
+    color: var(--text-muted);
+    padding: 0.2rem 0.5rem;
+}
+
+.modal-close-btn:hover {
+    color: var(--text-color);
+}
+
+/* ==========================================================================
+   خانة فحص أمان عميق — حالة واضحة (مفعّل/غير متاح)
+   ========================================================================== */
+
+.deep-scan-box {
+    background-color: #fafafa;
+    border: 1px solid #eee;
+    border-radius: var(--radius-sm);
+    padding: 0.8rem 1rem;
+    margin-top: 0.8rem;
+}
+
+.deep-scan-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.deep-scan-toggle-title {
+    font-size: 0.9rem;
+}
+
+.deep-scan-status {
+    font-size: 0.78rem;
+    margin: 0.4rem 0 0;
+}
+
+.deep-scan-status--on {
+    color: #16a34a;
+}
+
+.deep-scan-status--off {
+    color: var(--text-muted);
+}
+
+/* ==========================================================================
+   بطاقة إعلانية بسيطة لميزات Pro (بدون CTA، قابلة للإغلاق)
+   ========================================================================== */
+
+.pro-promo-card {
+    position: relative;
+    background: linear-gradient(135deg, #f5f3ff, #eef2ff);
+    border: 1px solid #ddd6fe;
+    border-radius: var(--radius-md, 12px);
+    padding: 1rem 1.25rem;
+    margin-bottom: 1.25rem;
+}
+
+.pro-promo-close {
+    position: absolute;
+    top: 0.6rem;
+    left: 0.6rem;
+    background: none;
+    border: none;
+    font-size: 1rem;
+    cursor: pointer;
+    color: var(--text-muted);
+    padding: 0.2rem 0.4rem;
+}
+
+.pro-promo-close:hover {
+    color: var(--text-color);
+}
+
+.pro-promo-title {
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+}
+
+.pro-promo-list {
+    margin: 0;
+    padding-inline-start: 1.2rem;
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    line-height: 1.8;
+}
+
+/* ==========================================================================
+   الرسم البياني لتطور الأداء (Trend Chart)
+   ========================================================================== */
+
+.trend-chart-svg {
+    width: 100%;
+    height: auto;
+    max-height: 240px;
+}
+
+.trend-chart-legend {
+    display: flex;
+    gap: 1.2rem;
+    justify-content: center;
+    font-size: 0.8rem;
+    margin-top: 0.5rem;
+    color: var(--text-muted);
+}
+
+.legend-dot {
+    display: inline-block;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    margin-inline-end: 0.3rem;
+}
+
+/* ==========================================================================
+   تحليل المنافسين
+   ========================================================================== */
+
+.competitor-result {
+    margin-top: 1rem;
+}
+
+.competitor-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+
+.competitor-row {
+    display: grid;
+    grid-template-columns: 1fr auto auto auto;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.5rem 0.7rem;
+    background-color: #fafafa;
+    border-radius: var(--radius-sm);
+    font-size: 0.85rem;
+}
+
+.competitor-row-label {
+    font-weight: 600;
+}
+
+.competitor-row-value {
+    font-weight: 700;
+    min-width: 32px;
+    text-align: center;
+}
+
+.competitor-row-value.win {
+    color: #16a34a;
+}
+
+.competitor-row-value.lose {
+    color: #dc2626;
+}
+
+.competitor-row-vs {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+}
+
+.competitor-summary {
+    margin-top: 0.9rem;
+    font-size: 0.85rem;
+    line-height: 1.7;
+}
+
+.competitor-tips {
+    margin: 0.5rem 0 0;
+    padding-inline-start: 1.2rem;
+    font-size: 0.82rem;
+    line-height: 1.9;
+    color: var(--text-muted);
 }

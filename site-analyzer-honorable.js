@@ -66,9 +66,20 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
     }
 
-    // ============ إدارة "مواقعي" ============
+    // ============ إدارة "مواقعي" (نافذة منبثقة) ============
     document.getElementById('my-sites-box').style.display = 'block';
     let mySites = []; // { domain, verified }
+
+    const modalOverlay = document.getElementById('my-sites-modal-overlay');
+    document.getElementById('open-my-sites-btn').addEventListener('click', () => {
+        modalOverlay.style.display = 'flex';
+    });
+    document.getElementById('close-my-sites-modal').addEventListener('click', () => {
+        modalOverlay.style.display = 'none';
+    });
+    modalOverlay.addEventListener('click', (e) => {
+        if (e.target === modalOverlay) modalOverlay.style.display = 'none'; // قفل بالدوس برا الصندوق
+    });
 
     async function loadMySites() {
         try {
@@ -80,6 +91,11 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await res.json();
             mySites = data.sites || [];
             renderMySites();
+
+            // شارة عدد المواقع على زرار "مواقعي"
+            const badge = document.getElementById('my-sites-count-badge');
+            const verifiedCount = mySites.filter(s => s.verified).length;
+            badge.textContent = mySites.length > 0 ? `(${verifiedCount}/${mySites.length} متحقق)` : '';
         } catch (err) {
             console.error('تعذّر تحميل مواقعي:', err);
         }
@@ -106,6 +122,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 const domain = btn.dataset.domain;
                 document.getElementById('analyze-url').value = `https://${domain}`;
                 syncDeepScanAvailability();
+                modalOverlay.style.display = 'none'; // اقفل النافذة تلقائي بعد الاختيار
+                document.getElementById('my-sites-selected-hint').textContent = `الموقع المختار: ${domain}`;
             });
         });
 
@@ -132,18 +150,20 @@ document.addEventListener('DOMContentLoaded', () => {
     function syncDeepScanAvailability() {
         const urlVal = document.getElementById('analyze-url').value.trim();
         const checkbox = document.getElementById('deep-scan-checkbox');
-        const label = document.getElementById('deep-scan-label');
+        const statusEl = document.getElementById('deep-scan-label');
         let domain = null;
         try { domain = new URL(urlVal).hostname; } catch { /* رابط ناقص لسه */ }
 
         const matched = domain && mySites.find(s => s.domain === domain && s.verified);
         if (matched) {
             checkbox.disabled = false;
-            label.textContent = `فحص أمان عميق (الثغرات) — متاح لـ ${domain}`;
+            statusEl.textContent = `✅ متاح — الموقع ده متحقق من ملكيته (${domain})`;
+            statusEl.className = 'deep-scan-status deep-scan-status--on';
         } else {
             checkbox.disabled = true;
             checkbox.checked = false;
-            label.textContent = 'فحص أمان عميق (الثغرات) — اختار موقع متحقق منه من "مواقعي" الأول';
+            statusEl.textContent = '🔒 غير متاح — اختار موقع متحقق منه من "مواقعي" الأول';
+            statusEl.className = 'deep-scan-status deep-scan-status--off';
         }
     }
 
@@ -198,6 +218,90 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     loadMySites();
+
+    // ============ تحليل المنافسين ============
+    document.getElementById('competitor-box').style.display = 'block';
+    const competitorOverlay = document.getElementById('competitor-modal-overlay');
+
+    document.getElementById('open-competitor-btn').addEventListener('click', () => {
+        competitorOverlay.style.display = 'flex';
+    });
+    document.getElementById('close-competitor-modal').addEventListener('click', () => {
+        competitorOverlay.style.display = 'none';
+    });
+    competitorOverlay.addEventListener('click', (e) => {
+        if (e.target === competitorOverlay) competitorOverlay.style.display = 'none';
+    });
+
+    document.getElementById('run-competitor-btn').addEventListener('click', async () => {
+        const myUrl = document.getElementById('competitor-my-url').value.trim();
+        const competitorUrl = document.getElementById('competitor-url').value.trim();
+        const resultBox = document.getElementById('competitor-result');
+        const btn = document.getElementById('run-competitor-btn');
+
+        if (!myUrl || !competitorUrl) {
+            alert('اكتب رابط موقعك ورابط المنافس الاتنين');
+            return;
+        }
+
+        btn.disabled = true;
+        btn.textContent = 'بنقارن...';
+        resultBox.style.display = 'none';
+
+        try {
+            const res = await fetch('/api/compare-competitor', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ myUrl, competitorUrl, email: currentUser.email })
+            });
+            const data = await res.json();
+
+            if (!res.ok || data.error) {
+                alert(data.error || 'حصل خطأ');
+                return;
+            }
+
+            renderCompetitorResult(data);
+            resultBox.style.display = 'block';
+        } catch (err) {
+            alert('تعذّر إجراء المقارنة: ' + err.message);
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'قارن الآن';
+        }
+    });
+
+    function renderCompetitorResult(data) {
+        const resultBox = document.getElementById('competitor-result');
+        const rows = [
+            { label: 'الأداء', mine: data.mySite.performance, theirs: data.competitorSite.performance },
+            { label: 'SEO', mine: data.mySite.seoScore, theirs: data.competitorSite.seoScore },
+            { label: 'الأمان', mine: data.mySite.securityScore, theirs: data.competitorSite.securityScore },
+            { label: 'عدد الكلمات', mine: data.mySite.wordCount, theirs: data.competitorSite.wordCount }
+        ];
+
+        const rowsHtml = rows.map(r => {
+            const mineWins = (r.mine ?? 0) >= (r.theirs ?? 0);
+            return `
+                <div class="competitor-row">
+                    <span class="competitor-row-label">${r.label}</span>
+                    <span class="competitor-row-value ${mineWins ? 'win' : 'lose'}">${r.mine ?? '—'}</span>
+                    <span class="competitor-row-vs">مقابل</span>
+                    <span class="competitor-row-value">${r.theirs ?? '—'}</span>
+                </div>
+            `;
+        }).join('');
+
+        const tipsHtml = (data.comparison?.tips || []).map(t => `
+            <li><strong>${t.area}:</strong> ${t.advice}</li>
+        `).join('');
+
+        resultBox.innerHTML = `
+            <div class="competitor-rows">${rowsHtml}</div>
+            <p class="competitor-summary">${data.comparison?.summary || ''}</p>
+            <ul class="competitor-tips">${tipsHtml}</ul>
+        `;
+    }
 
     form.addEventListener('submit', async (e) => {
         e.preventDefault();
@@ -277,12 +381,115 @@ function renderResults(data) {
     renderCruxCard(data.realUserData);
     renderSeoDetails(data.seo);
     renderGeoDetails(data.geo);
+    renderDeepScanResults(data.deepScan);
+    loadAndRenderTrendChart(data.url);
 
     document.getElementById('result-meta').textContent =
         data.aiRecommendations?.suggestedMetaDescription || 'لا توجد توصية';
 
     document.getElementById('result-schema').textContent =
         data.aiRecommendations?.schemaMarkup || 'لا يوجد كود مقترح';
+}
+
+// ============================================================
+// كارت نتائج الفحص العميق — شفافية كاملة: بيعرض كل حاجة اتفحصت
+// حتى لو كانت النتيجة "نضيفة" (مش بس المشاكل اللي طلعت)
+// ============================================================
+function renderDeepScanResults(deepScan) {
+    const card = document.getElementById('deep-scan-results-card');
+    const grid = document.getElementById('deep-scan-results-grid');
+    if (!card || !grid) return;
+
+    if (!deepScan || !deepScan.ran) {
+        card.style.display = 'none';
+        return;
+    }
+
+    const items = deepScan.checks.map(check => {
+        const status = check.clean ? 'ok' : 'bad';
+        const icon = check.clean ? '✅' : '🚨';
+        const value = check.clean
+            ? `اتفحص (${check.checkedCount} عنصر) — نضيف، مفيش مشاكل`
+            : `⚠️ لقينا ${check.foundCount} مشكلة — شوف "الحلول المقترحة" تحت للتفاصيل`;
+        return `
+            <div class="seo-item seo-item--${status}">
+                <span class="seo-item-icon">${icon}</span>
+                <span class="seo-item-label">${check.label}</span>
+                <span class="seo-item-value">${value}</span>
+            </div>
+        `;
+    });
+
+    grid.innerHTML = items.join('');
+    card.style.display = 'block';
+}
+
+// ============================================================
+// رسم بياني بسيط (SVG خام، بدون مكتبات) لتطور الأداء والـ SEO عبر آخر 20 فحص لنفس الرابط
+// ============================================================
+async function loadAndRenderTrendChart(url) {
+    const card = document.getElementById('trend-chart-card');
+    const container = document.getElementById('trend-chart-container');
+    if (!card || !container) return;
+
+    const currentUser = getCurrentUser();
+    if (!currentUser?.is_pro) { card.style.display = 'none'; return; }
+
+    try {
+        const res = await fetch('/api/scan-trend', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url, email: currentUser.email })
+        });
+        const data = await res.json();
+        const history = data.history || [];
+
+        if (history.length < 2) {
+            card.style.display = 'none'; // مفيش فايدة من رسم بياني بنقطة واحدة أو صفر
+            return;
+        }
+
+        container.innerHTML = buildTrendSvg(history);
+        card.style.display = 'block';
+    } catch (err) {
+        console.error('تعذّر تحميل تاريخ الفحوصات:', err);
+        card.style.display = 'none';
+    }
+}
+
+function buildTrendSvg(history) {
+    const width = 640, height = 220, padding = 36;
+    const maxScore = 100;
+    const stepX = (width - padding * 2) / (history.length - 1);
+
+    const toY = (score) => height - padding - ((score || 0) / maxScore) * (height - padding * 2);
+    const toX = (i) => padding + i * stepX;
+
+    const perfPoints = history.map((h, i) => `${toX(i)},${toY(h.performance_score)}`).join(' ');
+    const seoPoints = history.map((h, i) => `${toX(i)},${toY(h.seo_score)}`).join(' ');
+
+    const dateLabel = (ts) => {
+        const d = new Date(ts);
+        return `${d.getMonth() + 1}/${d.getDate()}`;
+    };
+
+    const firstLabel = dateLabel(history[0].checked_at);
+    const lastLabel = dateLabel(history[history.length - 1].checked_at);
+
+    return `
+        <svg viewBox="0 0 ${width} ${height}" class="trend-chart-svg" xmlns="http://www.w3.org/2000/svg">
+            <line x1="${padding}" y1="${height - padding}" x2="${width - padding}" y2="${height - padding}" stroke="#e5e7eb" stroke-width="1"/>
+            <line x1="${padding}" y1="${padding}" x2="${padding}" y2="${height - padding}" stroke="#e5e7eb" stroke-width="1"/>
+            <polyline points="${perfPoints}" fill="none" stroke="#7C3AED" stroke-width="2.5"/>
+            <polyline points="${seoPoints}" fill="none" stroke="#10b981" stroke-width="2.5"/>
+            <text x="${padding}" y="${height - 10}" font-size="11" fill="#6b7280">${firstLabel}</text>
+            <text x="${width - padding - 20}" y="${height - 10}" font-size="11" fill="#6b7280">${lastLabel}</text>
+        </svg>
+        <div class="trend-chart-legend">
+            <span><span class="legend-dot" style="background:#7C3AED"></span> الأداء</span>
+            <span><span class="legend-dot" style="background:#10b981"></span> SEO</span>
+        </div>
+    `;
 }
 
 // ============================================================

@@ -1,6 +1,12 @@
 document.addEventListener('DOMContentLoaded', () => {
 
     // ==========================================================================
+    // 0. كشف المتصفحات المدمجة (فيسبوك/إنستجرام/ماسنجر/تيك توك) — جوجل بتمنع
+    //    تسجيل الدخول منها عمدًا، فبنوضح للمستخدم السبب الحقيقي بدل رسالة غامضة
+    // ==========================================================================
+    detectInAppBrowserAndWarn();
+
+    // ==========================================================================
     // 1. معالجة تسجيل الدخول العادي (Email & Password)
     // ==========================================================================
     const loginForm = document.getElementById('login-form');
@@ -110,6 +116,12 @@ document.addEventListener('DOMContentLoaded', () => {
 // عشان كده لازم الدالة تفضل معرّفة على window، مش جوه أي Scope مقفول
 // ==========================================================================
 async function handleGoogleLogin(googleResponse) {
+    if (!googleResponse || !googleResponse.credential) {
+        // جوجل مبعتتش توكين خالص — الحالة النموذجية لما نكون جوه متصفح مدمج (فيسبوك/إنستجرام)
+        alert('تسجيل الدخول بجوجل فشل. لو إنت جاي من رابط في فيسبوك أو إنستجرام، افتح الرابط في متصفح حقيقي (كروم/سفاري) من قائمة (⋮ أو ...) فوق، وجرب تاني.');
+        return;
+    }
+
     try {
         const response = await fetch('/api/auth', {
             method: 'POST',
@@ -131,8 +143,28 @@ async function handleGoogleLogin(googleResponse) {
         }
     } catch (err) {
         console.error(err);
-        alert('حدث خطأ أثناء معالجة حساب جوجل.');
+        alert('حدث خطأ أثناء معالجة حساب جوجل. لو إنت داخل من رابط في فيسبوك/إنستجرام، افتح الرابط في متصفح حقيقي وجرب تاني.');
     }
 }
 
 window.handleGoogleLogin = handleGoogleLogin;
+
+// ============================================================
+// كشف المتصفحات المدمجة (In-App Browsers) وعرض تحذير واضح
+// جوجل بتمنع Sign-In من جواها عمدًا، فبنوضح السبب بدل ما نسيب
+// المستخدم يشوف رسالة "خطأ في السيرفر" غامضة ومربكة
+// ============================================================
+function detectInAppBrowserAndWarn() {
+    const ua = navigator.userAgent || '';
+    const isInAppBrowser = /FBAN|FBAV|Instagram|Line\/|MicroMessenger|TikTok/i.test(ua);
+    if (!isInAppBrowser) return;
+
+    const banner = document.createElement('div');
+    banner.className = 'inapp-browser-warning';
+    banner.innerHTML = `
+        ⚠️ إنت داخل من متصفح مدمج (فيسبوك/إنستجرام/تيك توك)، وتسجيل الدخول بجوجل ممنوع منه لأسباب أمنية بتاعة جوجل نفسها.
+        <br>افتح الرابط في متصفح حقيقي: دوس على (⋮ أو •••) فوق الشاشة واختار "فتح في المتصفح" (Open in Browser).
+    `;
+    document.body.insertBefore(banner, document.body.firstChild);
+}
+
