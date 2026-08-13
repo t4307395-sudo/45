@@ -873,6 +873,7 @@ a:hover {
 
 .analyzer-form {
     display: flex;
+    flex-wrap: wrap;
     gap: 0.75rem;
     max-width: 640px;
     margin-bottom: 2.5rem;
@@ -880,6 +881,7 @@ a:hover {
 
 .analyzer-input {
     flex: 1;
+    min-width: 180px;
     padding: 0.85rem 1.1rem;
     border: 1px solid var(--border-color);
     border-radius: var(--radius-sm);
@@ -899,6 +901,7 @@ a:hover {
     width: auto;
     padding: 0.85rem 1.75rem;
     white-space: nowrap;
+    flex-shrink: 0; /* الزرار مايتقلصش أبداً أصغر من نصه — لو الشاشة ضيقة جداً، الـ input يتلف تحته بدل ما الزرار يختفي */
 }
 
 .analyzer-loading {
@@ -2270,5 +2273,49 @@ a:hover {
     /* بطاقة الترقية الإعلانية: مساحة أقل حوالين النص */
     .pro-promo-card {
         padding: 0.9rem 1rem;
+    }
+}
+
+/* ==========================================================================
+   تعديل صندوق المستخدم للسياق الجديد (شريط علوي أفقي، مش عمود جانبي)
+   ========================================================================== */
+
+.app-shell--no-sidebar .app-topbar-simple {
+    flex-wrap: nowrap;
+}
+
+.app-shell--no-sidebar .user-chip {
+    margin-bottom: 0;
+    padding: 0;
+    min-width: 0;
+}
+
+.app-shell--no-sidebar .user-chip-text {
+    min-width: 0;
+    max-width: 130px; /* يجبر الـ ellipsis يشتغل فعلياً بدل ما يوسّع الشريط العلوي */
+}
+
+.app-shell--no-sidebar .logout-btn {
+    width: auto;
+    white-space: nowrap;
+    flex-shrink: 0;
+    padding: 0.45rem 0.8rem;
+}
+
+.app-shell--no-sidebar .topbar-user-box {
+    flex-shrink: 0;
+    min-width: 0;
+}
+
+@media (max-width: 480px) {
+    /* على الشاشات الضيقة جداً (زي الموبايل المطوي)، نخفي اسم/إيميل المستخدم
+       ونسيب الصورة الرمزية وزرار الخروج بس، عشان الشريط العلوي مايتكسرش */
+    .app-shell--no-sidebar .user-chip-text {
+        display: none;
+    }
+
+    .app-shell--no-sidebar .logout-btn {
+        padding: 0.45rem 0.55rem;
+        font-size: 0.75rem;
     }
 }
