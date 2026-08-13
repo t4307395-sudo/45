@@ -42,13 +42,7 @@ export async function onRequestPost(context) {
     // المعرّف: الإيميل بس (تسجيل الدخول إجباري دلوقتي)
     const identifier = email;
 
-    // 1) تحقق من الكاش الأول (ساعة واحدة) قبل أي حاجة تانية
-    const cached = await getCachedResult(env, url);
-    if (cached) {
-        return new Response(JSON.stringify({ ...cached, fromCache: true }), {
-            headers: { 'Content-Type': 'application/json' }
-        });
-    }
+    // الكاش اتشال بالكامل (من الاتنين، مجاني وPro) — كل فحص دلوقتي حي 100%، من غير أي نتيجة قديمة محفوظة
 
     // 2) تحقق من الحد اليومي (3 فحوصات فقط للمجانيين، غير محدود للمشتركين Pro)
     if (!isPro) {
@@ -226,8 +220,8 @@ export async function onRequestPost(context) {
             comparison
         };
 
-        // احفظ في الكاش وفي السجل التاريخي (من غير ما نستنى، مش لازم نأخر الرد بسببهم)
-        context.waitUntil(saveToCache(env, url, responseData));
+        // احفظ في الكاش (لغير المشتركين بس، الـ Pro مالوش كاش خالص) وفي السجل التاريخي دايمًا
+        // الكاش اتشال بالكامل — بنسجل بس في السجل التاريخي للمقارنات
         context.waitUntil(saveToHistory(env, identifier, url, mobile?.performanceScore, mobile?.seoScore));
 
         return new Response(JSON.stringify(responseData), {
@@ -236,37 +230,6 @@ export async function onRequestPost(context) {
 
     } catch (err) {
         return jsonError(err.message, 500);
-    }
-}
-
-// ============================================================
-// الكاش (ساعة واحدة لكل رابط)
-// ============================================================
-async function getCachedResult(env, url) {
-    try {
-        const row = await env.DB.prepare(
-            "SELECT result_json, cached_at FROM analysis_cache WHERE url = ?"
-        ).bind(url).first();
-
-        if (!row) return null;
-
-        const ageMs = Date.now() - row.cached_at;
-        if (ageMs > 60 * 60 * 1000) return null; // أقدم من ساعة
-
-        return JSON.parse(row.result_json);
-    } catch {
-        return null; // لو الجدول لسه مش موجود، منكملش الطلب من غير كاش
-    }
-}
-
-async function saveToCache(env, url, data) {
-    try {
-        await env.DB.prepare(
-            "INSERT INTO analysis_cache (url, result_json, cached_at) VALUES (?, ?, ?) " +
-            "ON CONFLICT(url) DO UPDATE SET result_json = excluded.result_json, cached_at = excluded.cached_at"
-        ).bind(url, JSON.stringify(data), Date.now()).run();
-    } catch {
-        // متعمّد: فشل الكاش مايوقفش الطلب الأساسي
     }
 }
 
@@ -1065,82 +1028,76 @@ export async function getStartIndex(env, totalKeys, counterId) {
 }
 
 // ============================================================
-// توصيات الذكاء الاصطناعي (Gemini API) — مع تدوير مفاتيح وFallback
+// قائمة المشاكل — بيانات حقيقية 100% من الفحص نفسه، بدون أي AI خالص
+// كل عنصر جاي مباشرة من audits (PageSpeed الحقيقي أو فحوصاتنا الخاصة)،
+// فمفيش أي احتمال "اختراع" مشكلة مش موجودة فعلياً
+// ============================================================
+function buildIssuesList(audits) {
+    return audits.map(a => ({
+        id: a.id || `${a.device || 'issue'}-${(a.title || '').slice(0, 30)}`,
+        device: a.device || null,
+        title: a.title,
+        description: a.description || null,
+        severity: deriveSeverity(a),
+        // الحل (steps + codeExample) هيتولّد عند الطلب بس، لما المستخدم يدوس "حل المشكلة"
+        hasSolution: false
+    }));
+}
+
+function deriveSeverity(audit) {
+    // مشاكل الأمان (device: 'security') والملفات الحساسة دايمًا حرجة
+    if (audit.device === 'security') return 'critical';
+    if (audit.device === 'geo') return 'medium';
+    if (typeof audit.score === 'number') {
+        if (audit.score < 0.5) return 'high';
+        if (audit.score < 0.9) return 'medium';
+    }
+    return 'low';
+}
+
+// ============================================================
+// توصيات إضافية بسيطة (وصف Meta وSchema بس) — استخدام محدود جداً للـ AI
 // ============================================================
 async function generateAIRecommendations(env, url, audits, safety, seo, realUserData, isPro) {
-    const keys = getGeminiKeys(env, isPro);
+    const fixes = buildIssuesList(audits);
 
+    const keys = getGeminiKeys(env, isPro);
     if (keys.length === 0) {
-        return fallbackRecommendations('مفيش أي مفتاح Gemini مربوط بالمشروع.');
+        return { fixes, suggestedMetaDescription: null, schemaMarkup: null, keyUsed: null };
     }
 
-    const prompt = buildPrompt(url, audits, safety, seo, realUserData);
-    // عداد تدوير منفصل لكل مجمّع (id=1 للمجاني، id=2 للـ Pro) عشان محدش يأثر على دور التاني
+    // برومبت خفيف جداً بس لوصف Meta وSchema (مش لتوليد مشاكل خالص، عشان كده مفيش خطر اختراع)
+    const prompt = `
+أنت خبير SEO. بناءً على البيانات دي عن موقع ${url}:
+${seo ? JSON.stringify(seo) : 'غير متاحة'}
+
+رجّع بصيغة JSON فقط، من غير أي نص زيادة أو backticks:
+{
+  "suggestedMetaDescription": "وصف Meta بالعربي جاهز (155 حرف تقريباً) لو ناقص أو قصير، أو null لو موجود وكويس فعلاً",
+  "schemaMarkup": "كود Schema Markup (JSON-LD نوع WebPage) جاهز للنسخ"
+}
+`.trim();
+
     const startIndex = await getStartIndex(env, keys.length, isPro ? 2 : 1);
 
-    // نجرب كل مفتاح بالترتيب بدءاً من دوره، ولو خلّص كوتته ننتقل للتالي تلقائياً
     for (let attempt = 0; attempt < keys.length; attempt++) {
         const keyEntry = keys[(startIndex + attempt) % keys.length];
-
         try {
-            const result = await callGemini(keyEntry.key, prompt);
-            result.keyUsed = keyEntry.index;
-            return result;
+            const raw = await callGemini(keyEntry.key, prompt);
+            return {
+                fixes,
+                suggestedMetaDescription: raw.suggestedMetaDescription || null,
+                schemaMarkup: raw.schemaMarkup || null,
+                keyUsed: keyEntry.index
+            };
         } catch (err) {
-            if (err.isRateLimit && attempt < keys.length - 1) {
-                continue; // جرّب المفتاح اللي بعده
-            }
-            if (err.isRateLimit) {
-                return fallbackRecommendations('الخدمة مشغولة حالياً، من فضلك حاول تاني بعد بضع دقائق.');
-            }
-            return fallbackRecommendations('تعذّر توليد التوصيات: ' + err.message);
+            if (err.isRateLimit && attempt < keys.length - 1) continue;
+            break;
         }
     }
 
-    return fallbackRecommendations('يرجى المحاولة بعد بضع دقائق.');
-}
-
-function buildPrompt(url, audits, safety, seo, realUserData) {
-    return `
-أنت مهندس ويب خبير في الأداء والأرشفة (SEO). قدّامك تقرير Lighthouse كامل لموقع ${url}
-(موبايل وديسكتوب مع بعض)، فيه كل المشاكل الحقيقية اللي الموقع فاشل فيها (كبيرة وصغيرة، مش ملخص فقط).
-
-المشاكل المكتشفة (${audits.length} مشكلة، كل واحدة موسومة بجهاز mobile أو desktop):
-${JSON.stringify(audits)}
-
-بيانات إضافية عن الصفحة: ${seo ? JSON.stringify(seo) : 'غير متاحة'}
-بيانات الأمان: ${safety ? JSON.stringify(safety) : 'غير متاحة'}
-
-${realUserData ? `
-بيانات حقيقية من زوار الموقع الفعليين آخر 28 يوم (مش محاكاة، دي تجربة المستخدمين الحقيقية):
-${JSON.stringify(realUserData)}
-(goodPercent = نسبة الزوار اللي شافوا تجربة كويسة في المقياس ده. لو goodPercent قليل رغم إن نتيجة
-Lighthouse المعملية كويسة، ده مهم جداً تنبّه عليه لأنه معناه الفحص المعملي مابيعكسش تجربة المستخدم
-الحقيقية على الإنترنت والأجهزة الواقعية)
-` : 'بيانات المستخدمين الحقيقيين غير متاحة (الموقع لسه مفيهوش زيارات كافية من Chrome لتوليدها).'}
-
-المطلوب منك بالظبط، لكل مشكلة مهمة (اختار أهمها، صغيرة كانت أو كبيرة، بحد أقصى 12 مشكلة):
-- severity: صنّفها "critical" أو "high" أو "medium" فقط، حسب حجم تأثيرها الفعلي
-  (لو فيه تعارض بين نتيجة المعمل وبيانات المستخدمين الحقيقيين، اعتمد على الحقيقية في التصنيف)
-- title: اسم المشكلة بالعربي وبشكل مباشر
-- impact: تأثيرها الفعلي بالأرقام (مثال: "بيبطّئ التحميل 1.2 ثانية على الموبايل")
-- steps: مصفوفة (array) من الخطوات العملية المرقّمة تلقائياً، كل خطوة جملة قصيرة واحدة ومباشرة
-  (متكتبش الخطوات كلها في نص واحد طويل، كل خطوة عنصر منفصل في المصفوفة)
-- codeExample: كود فعلي جاهز للنسخ يحل المشكلة، أو null صراحة لو مفيش كود منطقي (متختلقش كود وهمي)
-
-وبرضو:
-- suggestedMetaDescription: لو الـmeta description ناقصة أو قصيرة، وصف Meta جاهز (155 حرف تقريباً)
-- schemaMarkup: كود Schema Markup (JSON-LD نوع WebPage) جاهز للنسخ
-
-رد بصيغة JSON فقط بالشكل ده بالظبط، من غير أي نص زيادة قبله أو بعده، ومن غير علامات كود markdown:
-{
-  "fixes": [
-    { "severity": "critical", "title": "...", "impact": "...", "steps": ["...", "..."], "codeExample": "..." }
-  ],
-  "suggestedMetaDescription": "...",
-  "schemaMarkup": "..."
-}
-`.trim();
+    // حتى لو فشل جزء الـ Meta/Schema، قائمة المشاكل الحقيقية (fixes) لازم تفضل موجودة دايمًا
+    return { fixes, suggestedMetaDescription: null, schemaMarkup: null, keyUsed: null };
 }
 
 export async function callGemini(apiKey, prompt) {
@@ -1175,16 +1132,11 @@ export async function callGemini(apiKey, prompt) {
     const jsonMatch = rawText.match(/\{[\s\S]*\}/);
     const parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : null;
 
-    return parsed || fallbackRecommendations('تعذّر فهم رد الذكاء الاصطناعي.');
-}
+    if (!parsed) {
+        throw new Error('تعذّر فهم رد الذكاء الاصطناعي.');
+    }
 
-function fallbackRecommendations(message) {
-    return {
-        fixes: [{ severity: 'medium', title: 'تعذّر توليد التوصيات', impact: null, steps: [message], codeExample: null }],
-        suggestedMetaDescription: null,
-        schemaMarkup: null,
-        keyUsed: null
-    };
+    return parsed;
 }
 
 // ============================================================

@@ -38,42 +38,17 @@
 </head>
 <body class="app-body">
 
-    <div id="sidebar-overlay" class="sidebar-overlay"></div>
+    <div class="app-shell app-shell--no-sidebar">
 
-    <div class="app-shell">
-
-        <aside id="app-sidebar" class="app-sidebar">
-            <div class="sidebar-brand">
+        <header class="app-topbar-simple">
+            <a href="index.html" class="topbar-logo-link">
                 <span class="brand-mark">SW</span>
-                <div class="brand-text">
-                    <span class="brand-name">سوبر ويب</span>
-                    <span class="brand-tag">super-web · v1.0</span>
-                </div>
-            </div>
+                <span class="brand-name">سوبر ويب</span>
+            </a>
+            <div id="sidebar-user-box" class="topbar-user-box"></div>
+        </header>
 
-            <nav class="sidebar-nav">
-                <a href="index.html" class="sidebar-link">
-                    <span class="sidebar-link-icon">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v9a1 1 0 0 0 1 1H9a1 1 0 0 0 1-1v-4a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v4a1 1 0 0 0 1 1h2.5a1 1 0 0 0 1-1v-9"/></svg>
-                    </span>
-                    <span class="sidebar-link-text">الرئيسية</span>
-                </a>
-
-                <div class="sidebar-section-label">الأدوات</div>
-                <div id="sidebar-tools-list" class="sidebar-tools-list"></div>
-            </nav>
-
-            <div id="sidebar-user-box" class="sidebar-user-box"></div>
-        </aside>
-
-        <div class="app-main">
-
-            <header class="app-topbar">
-                <button id="mobile-menu-toggle" class="mobile-menu-toggle" aria-label="فتح القائمة">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3.5 6.5h17M3.5 12h17M3.5 17.5h17"/></svg>
-                </button>
-                <span class="topbar-path">~ / site-analyzer.html</span>
-            </header>
+        <div class="app-main app-main--full">
 
             <main class="app-content">
 

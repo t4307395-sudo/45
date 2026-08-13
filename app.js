@@ -20,31 +20,8 @@ function icon(name) {
 }
 
 // ------------------------------------------------------------------
-// 1. بناء الشريط الجانبي وشبكة الأدوات من tools-config.js
+// 1. بناء شبكة الأدوات من tools-config.js (في الصفحة الرئيسية بس)
 // ------------------------------------------------------------------
-function renderSidebarLinks() {
-    const list = document.getElementById('sidebar-tools-list');
-    if (!list || typeof TOOLS === 'undefined') return;
-
-    const currentPage = window.location.pathname.split('/').pop() || 'index.html';
-
-    list.innerHTML = TOOLS.map(tool => {
-        const isActive = currentPage === tool.route;
-        const isSoon = tool.status !== 'active';
-        const href = isSoon ? '#' : tool.route;
-
-        return `
-            <a href="${href}"
-               class="sidebar-link ${isActive ? 'is-active' : ''} ${isSoon ? 'is-soon' : ''}"
-               ${isSoon ? 'onclick="return false;" aria-disabled="true"' : ''}>
-                <span class="sidebar-link-icon">${icon(tool.icon)}</span>
-                <span class="sidebar-link-text">${tool.name}</span>
-                ${isSoon ? '<span class="soon-badge">قريباً</span>' : ''}
-            </a>
-        `;
-    }).join('');
-}
-
 function renderToolsGrid() {
     const grid = document.getElementById('tools-grid');
     if (!grid || typeof TOOLS === 'undefined') return;
@@ -69,7 +46,7 @@ function renderToolsGrid() {
 }
 
 // ------------------------------------------------------------------
-// 2. حالة تسجيل الدخول في الشريط الجانبي
+// 2. حالة تسجيل الدخول في الشريط العلوي
 // ------------------------------------------------------------------
 function renderUserSection() {
     const box = document.getElementById('sidebar-user-box');
@@ -110,28 +87,6 @@ function renderUserSection() {
     }
 }
 
-// ------------------------------------------------------------------
-// 3. فتح/قفل الشريط الجانبي على الموبايل
-// ------------------------------------------------------------------
-function setupMobileToggle() {
-    const toggleBtn = document.getElementById('mobile-menu-toggle');
-    const sidebar = document.getElementById('app-sidebar');
-    const overlay = document.getElementById('sidebar-overlay');
-    if (!toggleBtn || !sidebar || !overlay) return;
-
-    function closeSidebar() {
-        sidebar.classList.remove('is-open');
-        overlay.classList.remove('is-visible');
-    }
-
-    toggleBtn.addEventListener('click', () => {
-        sidebar.classList.toggle('is-open');
-        overlay.classList.toggle('is-visible');
-    });
-
-    overlay.addEventListener('click', closeSidebar);
-}
-
 function renderToolsCount() {
     const badge = document.getElementById('tools-count-badge');
     if (!badge || typeof TOOLS === 'undefined') return;
@@ -140,9 +95,7 @@ function renderToolsCount() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-    renderSidebarLinks();
     renderToolsGrid();
     renderToolsCount();
     renderUserSection();
-    setupMobileToggle();
 });

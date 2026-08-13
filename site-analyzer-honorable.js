@@ -595,13 +595,6 @@ function renderComparisonBadge(comparison, fromCache) {
     const badge = document.getElementById('comparison-badge');
     if (!badge) return;
 
-    if (fromCache) {
-        badge.style.display = 'inline-flex';
-        badge.className = 'comparison-badge comparison-badge--cache';
-        badge.textContent = '⚡ نتيجة من الكاش (اتفحص قبل كده خلال آخر ساعة)';
-        return;
-    }
-
     if (!comparison || comparison.performanceDelta == null) {
         badge.style.display = 'none';
         return;
@@ -809,42 +802,87 @@ function renderFixes() {
 
     container.innerHTML = visibleFixes.map((fix, index) => {
         const codeBlockId = `fix-code-${index}`;
+        const solutionBoxId = `fix-solution-${index}`;
         const severity = fix.severity && SEVERITY_LABELS[fix.severity] ? fix.severity : 'medium';
-        const steps = Array.isArray(fix.steps) ? fix.steps : (fix.instructions ? [fix.instructions] : []);
 
         return `
-            <div class="fix-card fix-card--${severity}">
+            <div class="fix-card fix-card--${severity}" data-fix-index="${index}">
                 <div class="fix-severity-bar"></div>
                 <div class="fix-card-body">
                     <div class="fix-card-header">
                         <span class="fix-severity-badge fix-severity-badge--${severity}">${SEVERITY_LABELS[severity]}</span>
-                        ${fix.impact ? `<span class="fix-impact">${escapeHtml(fix.impact)}</span>` : ''}
                     </div>
 
                     <div class="fix-section">
                         <span class="fix-section-label">المشكلة</span>
                         <h4 class="fix-title">${escapeHtml(fix.title || 'مشكلة')}</h4>
+                        ${fix.description ? `<p class="fix-description">${escapeHtml(fix.description)}</p>` : ''}
                     </div>
 
-                    <div class="fix-section">
-                        <span class="fix-section-label fix-section-label--solution">الحل المقترح</span>
-                        <ol class="fix-steps">
-                            ${steps.map(step => `<li>${escapeHtml(step)}</li>`).join('')}
-                        </ol>
+                    <div id="${solutionBoxId}" class="fix-solution-box">
+                        <button type="button" class="solve-issue-btn" data-index="${index}">🔧 حل المشكلة</button>
                     </div>
-
-                    ${fix.codeExample ? `
-                        <div class="fix-code-wrap">
-                            <button class="copy-btn" data-copy-target="${codeBlockId}">نسخ الكود</button>
-                            <pre id="${codeBlockId}" class="result-code result-code--block">${escapeHtml(fix.codeExample)}</pre>
-                        </div>
-                    ` : ''}
                 </div>
             </div>
         `;
     }).join('');
 
     setupCopyButtons();
+    setupSolveButtons(visibleFixes);
+}
+
+// ============================================================
+// توليد حل مشكلة واحدة عند الطلب (بدل ما كله يتولّد تلقائي مقدمًا)
+// ============================================================
+function setupSolveButtons(visibleFixes) {
+    document.querySelectorAll('.solve-issue-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const index = parseInt(btn.dataset.index, 10);
+            const fix = visibleFixes[index];
+            const box = btn.closest('.fix-solution-box');
+            const user = getCurrentUser();
+
+            btn.disabled = true;
+            btn.textContent = '⏳ بنحلل...';
+
+            try {
+                const res = await fetch('/api/solve-issue', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        title: fix.title,
+                        description: fix.description,
+                        device: fix.device,
+                        url: lastReport?.url || null,
+                        email: user?.email || null
+                    })
+                });
+                const data = await res.json();
+
+                if (!res.ok || data.error) {
+                    box.innerHTML = `<p class="fix-solution-error">تعذّر توليد الحل: ${data.error || 'حاول تاني'}</p>`;
+                    return;
+                }
+
+                const codeId = `solved-code-${index}`;
+                box.innerHTML = `
+                    <span class="fix-section-label fix-section-label--solution">الحل المقترح</span>
+                    <ol class="fix-steps">
+                        ${(data.steps || []).map(step => `<li>${escapeHtml(step)}</li>`).join('')}
+                    </ol>
+                    ${data.codeExample ? `
+                        <div class="fix-code-wrap">
+                            <button class="copy-btn" data-copy-target="${codeId}">نسخ الكود</button>
+                            <pre id="${codeId}" class="result-code result-code--block">${escapeHtml(data.codeExample)}</pre>
+                        </div>
+                    ` : ''}
+                `;
+                setupCopyButtons();
+            } catch (err) {
+                box.innerHTML = `<p class="fix-solution-error">تعذّر الاتصال بالسيرفر: ${err.message}</p>`;
+            }
+        });
+    });
 }
 
 function setupFixesFilter() {

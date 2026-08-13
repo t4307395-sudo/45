@@ -58,6 +58,14 @@ body {
     width: 100%;
 }
 
+/* شبكة أمان عامة: أي نص طويل بدون مسافات (رابط، إيميل، كود) داخل أي عنصر نصي
+   لازم ينكسر جوه حدوده مهما كان، بدل ما يوسّع الصفحة ويكسر التصميم على الموبايل.
+   ده مايأثرش على أي layout موجود، بس بيمنع overflow لو حصل سهو في مكان مانتبهناش له */
+p, span, li, td, th, label, h1, h2, h3, h4, h5, h6, a, button, code, pre {
+    overflow-wrap: break-word;
+    min-width: 0;
+}
+
 a {
     color: var(--primary-color);
     text-decoration: none;
@@ -850,24 +858,6 @@ a:hover {
 
 /* -------------------- تجاوب الموبايل -------------------- */
 @media (max-width: 900px) {
-    .app-sidebar {
-        position: fixed;
-        top: 0;
-        right: 0;
-        z-index: 40;
-        transform: translateX(100%);
-        transition: transform 0.25s ease;
-        box-shadow: var(--shadow-lg);
-    }
-
-    .app-sidebar.is-open {
-        transform: translateX(0);
-    }
-
-    .app-topbar {
-        display: flex;
-    }
-
     .app-content {
         padding: 2rem 1.25rem 3rem;
     }
@@ -1676,6 +1666,12 @@ a:hover {
 .ownership-note {
     font-size: 0.82rem;
     color: var(--text-muted);
+    overflow-wrap: break-word;
+}
+
+#ownership-file-url {
+    word-break: break-all;
+    overflow-wrap: break-word;
 }
 
 .ownership-step {
@@ -2097,4 +2093,182 @@ a:hover {
     font-size: 0.82rem;
     line-height: 1.9;
     color: var(--text-muted);
+}
+
+/* ==========================================================================
+   زرار "حل المشكلة" عند الطلب (بدل التوليد التلقائي لكل المشاكل)
+   ========================================================================== */
+
+.fix-description {
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    margin: 0.3rem 0 0;
+    line-height: 1.7;
+}
+
+.fix-solution-box {
+    margin-top: 0.8rem;
+}
+
+.solve-issue-btn {
+    padding: 0.55rem 1.1rem;
+    background-color: var(--primary-color);
+    color: #fff;
+    border: none;
+    border-radius: var(--radius-sm);
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.solve-issue-btn:hover:not(:disabled) {
+    background-color: var(--primary-hover);
+}
+
+.solve-issue-btn:disabled {
+    opacity: 0.7;
+    cursor: wait;
+}
+
+.fix-solution-error {
+    color: #dc2626;
+    font-size: 0.82rem;
+}
+
+/* ==========================================================================
+   شريط علوي بسيط بدون شريط جانبي (لوجو بس + حساب المستخدم)
+   ========================================================================== */
+
+.app-shell--no-sidebar {
+    display: block;
+    min-height: 100vh;
+}
+
+.app-main--full {
+    display: block;
+    width: 100%;
+}
+
+.app-topbar-simple {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.9rem 1.5rem;
+    border-bottom: 1px solid var(--border-color);
+    background-color: var(--card-bg);
+    position: sticky;
+    top: 0;
+    z-index: 30;
+}
+
+.topbar-logo-link {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    text-decoration: none;
+    color: inherit;
+}
+
+.topbar-logo-link .brand-mark {
+    width: 34px;
+    height: 34px;
+    border-radius: var(--radius-sm);
+    background: var(--gradient-brand);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 0.85rem;
+}
+
+.topbar-logo-link .brand-name {
+    font-weight: 700;
+    font-size: 0.95rem;
+}
+
+.topbar-user-box {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+}
+
+.app-shell--no-sidebar .app-content {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 2rem 1.25rem 3rem;
+}
+
+@media (max-width: 640px) {
+    .topbar-logo-link .brand-name {
+        display: none; /* على الموبايل، اللوجو بس كفاية، عشان توفير مساحة */
+    }
+}
+
+/* ==========================================================================
+   تحسينات موبايل للعناصر الجديدة (نوافذ منبثقة، مواقعي، تحليل منافسين)
+   ========================================================================== */
+
+@media (max-width: 480px) {
+    /* النوافذ المنبثقة: تاخد الشاشة كلها تقريباً، مش صندوق صغير وسط الشاشة */
+    .my-sites-modal-overlay,
+    .pro-modal-overlay {
+        padding: 0.6rem;
+    }
+
+    .my-sites-modal-box,
+    .pro-modal-box {
+        padding: 1.1rem;
+        max-height: 90vh;
+    }
+
+    /* صف الموقع في "مواقعي": يترتب عمودي بدل ما يتزنق أفقي */
+    .my-site-row {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .my-site-use-btn,
+    .my-site-remove-btn {
+        margin-inline-start: 0;
+        width: 100%;
+        text-align: center;
+        margin-top: 0.3rem;
+    }
+
+    /* صف مقارنة المنافس: عمودين بدل 4 عشان الأرقام متتكدسش */
+    .competitor-row {
+        grid-template-columns: 1fr auto;
+        row-gap: 0.2rem;
+    }
+
+    .competitor-row-vs {
+        display: none; /* مش لازمة لما العرض عمودين، هتاخد مكان زيادة */
+    }
+
+    /* أزرار الفتح (مواقعي / تحليل منافس) تاخد عرض كامل عشان سهولة اللمس */
+    .my-sites-open-btn,
+    #open-competitor-btn {
+        width: 100%;
+        justify-content: center;
+    }
+
+    /* صندوق إضافة موقع: الزرار ياخد عرض كامل بدل ما يتقطع */
+    .add-site-box {
+        flex-direction: column;
+    }
+
+    .add-site-box .analyzer-input,
+    .add-site-box .btn-secondary {
+        width: 100%;
+        min-width: 0;
+    }
+
+    /* بطاقة الترقية الإعلانية: مساحة أقل حوالين النص */
+    .pro-promo-card {
+        padding: 0.9rem 1rem;
+    }
 }
