@@ -6,6 +6,10 @@
  *                      (تدوير تلقائي بينهم + Fallback لو مفتاح خلّصت كوتته)
  *                      env.DB (D1) لتخزين عداد التدوير
  */
+export function onRequestGet() {
+    return jsonError('استخدم POST مع رابط الموقع للفحص.', 405, { 'Allow': 'POST' });
+}
+
 export async function onRequestPost(context) {
     const { request, env } = context;
 
@@ -28,30 +32,26 @@ export async function onRequestPost(context) {
         return jsonError('من فضلك أدخل رابط صحيح يبدأ بـ http:// أو https://', 400);
     }
 
-    // تسجيل الدخول إجباري لاستخدام الأداة
-    if (!email) {
-        return jsonError('لازم تسجّل دخول الأول عشان تقدر تستخدم الأداة.', 401);
-    }
+    // تسجيل الدخول اختياري: البريد يُستخدم فقط لو كان حساباً موجوداً، وإلا نعامل الطلب كزائر.
+    const normalizedEmail = typeof email === 'string' ? email.trim().toLowerCase() : '';
+    const userExists = normalizedEmail
+        ? await env.DB.prepare("SELECT id, email, is_pro FROM users WHERE email = ?").bind(normalizedEmail).first()
+        : null;
+    const isRegistered = !!userExists;
+    const isPro = !!userExists?.is_pro;
+    const guestIdentity = getGuestIdentity(request);
+    const identifier = isRegistered ? `user:${userExists.email.toLowerCase()}` : `guest:${guestIdentity.id}`;
+    const quotaLimit = isPro ? null : (isRegistered ? 6 : 3);
+    let quota = null;
 
-    const userExists = await env.DB.prepare("SELECT id, is_pro FROM users WHERE email = ?").bind(email).first();
-    if (!userExists) {
-        return jsonError('الحساب ده مش موجود، سجّل دخول تاني.', 401);
-    }
-    const isPro = !!userExists.is_pro;
-
-    // المعرّف: الإيميل بس (تسجيل الدخول إجباري دلوقتي)
-    const identifier = email;
-
-    // الكاش اتشال بالكامل (من الاتنين، مجاني وPro) — كل فحص دلوقتي حي 100%، من غير أي نتيجة قديمة محفوظة
-
-    // 2) تحقق من الحد اليومي (3 فحوصات فقط للمجانيين، غير محدود للمشتركين Pro)
-    if (!isPro) {
-        const limitCheck = await checkAndIncrementLimit(env, identifier);
-        if (!limitCheck.allowed) {
-            return jsonError(
-                `وصلت للحد الأقصى (3 فحوصات في اليوم). حاول تاني بكرة، أو جرب رابط فحصته قبل كده هيرجع من الكاش فوراً.`,
-                429
-            );
+    // الفحص الأول للزائر متاح بدون حساب. الزائر يحصل على 3 فحوصات يومياً، والمسجل على 6.
+    if (quotaLimit !== null) {
+        quota = await checkAndIncrementLimit(env, identifier, quotaLimit);
+        if (!quota.allowed) {
+            const message = isRegistered
+                ? 'خلصت فحوصاتك الستة اليوم. ارجع بكرة وحاول تاني.'
+                : 'خلصت الفحوصات الثلاثة المجانية اليوم. سجّل حسابك للحصول على 6 فحوصات يومياً.';
+            return jsonError(message, 429, guestIdentity.setCookie ? { 'Set-Cookie': guestIdentity.setCookie } : {});
         }
     }
 
@@ -76,6 +76,11 @@ export async function onRequestPost(context) {
         const seo = pageContent.status === 'fulfilled' ? pageContent.value : null;
         const realUserData = cruxResult.status === 'fulfilled' ? cruxResult.value : null;
         const geo = geoResult.status === 'fulfilled' ? geoResult.value : null;
+        const dataQuality = buildDataQuality({ mobileResult, desktopResult, safeBrowsingResult, securityAuditResult, pageContent, cruxResult, geoResult });
+
+        if (!mobile && !desktop) {
+            return jsonError('لم نتمكن من الحصول على قياسات السرعة من PageSpeed لهذا الرابط. جرّب مرة أخرى أو تأكد أن الموقع متاح للعامة.', 502);
+        }
 
         // دمج فحص "الموقع مصنّف كخبيث؟" مع فحص "إعدادات الأمان الفعلية" في كيان واحد
         // السكور النهائي = 0 فوري لو الموقع مصنّف خبيث، وإلا سكور إعدادات الأمان الفعلية
@@ -168,6 +173,16 @@ export async function onRequestPost(context) {
         const responseData = {
             success: true,
             url,
+            dataQuality,
+            usage: {
+                accountType: isPro ? 'pro' : (isRegistered ? 'registered' : 'guest'),
+                limit: quotaLimit,
+                used: quota?.count ?? null,
+                remaining: quota?.remaining ?? null,
+                registrationPrompt: !isRegistered && (quota?.remaining ?? 0) > 0
+                    ? 'سجّل للحصول على 6 فحوصات يومياً بدل 3 فحوصات للزائر.'
+                    : null
+            },
             checkedAt: new Date().toISOString(),
             mobile: mobile ? stripAudits(mobile) : null,
             desktop: desktop ? stripAudits(desktop) : null,
@@ -224,9 +239,9 @@ export async function onRequestPost(context) {
         // الكاش اتشال بالكامل — بنسجل بس في السجل التاريخي للمقارنات
         context.waitUntil(saveToHistory(env, identifier, url, mobile?.performanceScore, mobile?.seoScore));
 
-        return new Response(JSON.stringify(responseData), {
-            headers: { 'Content-Type': 'application/json' }
-        });
+        const responseHeaders = { 'Content-Type': 'application/json' };
+        if (guestIdentity.setCookie) responseHeaders['Set-Cookie'] = guestIdentity.setCookie;
+        return new Response(JSON.stringify(responseData), { headers: responseHeaders });
 
     } catch (err) {
         return jsonError(err.message, 500);
@@ -236,7 +251,7 @@ export async function onRequestPost(context) {
 // ============================================================
 // الحد اليومي (3 فحوصات لكل حساب/IP)
 // ============================================================
-async function checkAndIncrementLimit(env, identifier) {
+async function checkAndIncrementLimit(env, identifier, limit) {
     const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
 
     try {
@@ -245,20 +260,37 @@ async function checkAndIncrementLimit(env, identifier) {
         ).bind(identifier, today).first();
 
         const currentCount = row?.count || 0;
-
-        if (currentCount >= 3) {
-            return { allowed: false };
+        if (currentCount >= limit) {
+            return { allowed: false, count: currentCount, remaining: 0 };
         }
 
+        const nextCount = currentCount + 1;
         await env.DB.prepare(
             "INSERT INTO scan_limits (identifier, scan_date, count) VALUES (?, ?, 1) " +
             "ON CONFLICT(identifier, scan_date) DO UPDATE SET count = count + 1"
         ).bind(identifier, today).run();
 
-        return { allowed: true };
+        return { allowed: true, count: nextCount, remaining: Math.max(0, limit - nextCount) };
     } catch {
-        return { allowed: true }; // لو الجدول لسه مش موجود، منمنعش المستخدم بسبب مشكلة عندنا
+        // لو الجدول غير متاح، لا نمنع الفحص بسبب عطل داخلي؛ نترك usage غير معروف.
+        return { allowed: true, count: null, remaining: null };
     }
+}
+
+function getGuestIdentity(request) {
+    const cookieHeader = request.headers.get('Cookie') || '';
+    const match = cookieHeader.match(/(?:^|;\\s*)sw_guest_id=([^;]+)/);
+    const existing = match?.[1] ? decodeURIComponent(match[1]) : '';
+    if (existing && /^[a-zA-Z0-9_-]{16,80}$/.test(existing)) {
+        return { id: existing, setCookie: null };
+    }
+
+    const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+    const id = `${crypto.randomUUID()}-${ip.replace(/[^a-zA-Z0-9]/g, '').slice(0, 16)}`;
+    return {
+        id,
+        setCookie: `sw_guest_id=${encodeURIComponent(id)}; Max-Age=86400; Path=/; Secure; HttpOnly; SameSite=Lax`
+    };
 }
 
 // ============================================================
@@ -303,6 +335,27 @@ function stripAudits(deviceResult) {
     return rest;
 }
 
+function scoreToPercent(score) {
+    return typeof score === 'number' && Number.isFinite(score)
+        ? Math.round(score * 100)
+        : null;
+}
+
+function buildDataQuality(results) {
+    const checks = Object.fromEntries(Object.entries(results).map(([name, result]) => [
+        name,
+        result.status === 'fulfilled'
+            ? { status: 'ok' }
+            : { status: 'unavailable', reason: result.reason?.message || 'مصدر البيانات لم يستجب' }
+    ]));
+    const unavailable = Object.entries(checks).filter(([, value]) => value.status !== 'ok');
+    return {
+        complete: unavailable.length === 0,
+        checks,
+        warnings: unavailable.map(([name, value]) => `${name}: ${value.reason}`)
+    };
+}
+
 // ============================================================
 // فحص السرعة (PageSpeed Insights API) — لجهاز واحد (موبايل/ديسكتوب)
 // ============================================================
@@ -324,9 +377,9 @@ export async function fetchPageSpeed(url, apiKey, strategy) {
 
     return {
         strategy,
-        performanceScore: Math.round((categories.performance?.score || 0) * 100),
-        seoScore: Math.round((categories.seo?.score || 0) * 100),
-        accessibilityScore: Math.round((categories.accessibility?.score || 0) * 100),
+        performanceScore: scoreToPercent(categories.performance?.score),
+        seoScore: scoreToPercent(categories.seo?.score),
+        accessibilityScore: scoreToPercent(categories.accessibility?.score),
         firstContentfulPaint: audits['first-contentful-paint']?.displayValue || null,
         largestContentfulPaint: audits['largest-contentful-paint']?.displayValue || null,
         totalBlockingTime: audits['total-blocking-time']?.displayValue || null,
@@ -1151,9 +1204,9 @@ function isValidUrl(str) {
     }
 }
 
-function jsonError(message, status) {
+function jsonError(message, status, extraHeaders = {}) {
     return new Response(JSON.stringify({ error: message }), {
         status,
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 'Content-Type': 'application/json', ...extraHeaders }
     });
 }

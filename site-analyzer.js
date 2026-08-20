@@ -50,16 +50,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const form = document.getElementById('analyze-form');
     if (!form) return;
 
-    // تسجيل الدخول إجباري لاستخدام الأداة
+    // الفحص متاح للزائر. تسجيل الدخول اختياري للحصول على حد أعلى يومياً.
     const currentUser = getCurrentUser();
-    if (!currentUser || !currentUser.email) {
-        document.getElementById('analyzer-input-section').style.display = 'none';
-        document.getElementById('login-required-box').style.display = 'block';
-        return; // منوقفش أي Listeners تانية، الأداة كلها متعطلة لغير المسجلين
-    }
 
     // مشترك Pro؟ نعرضله نافذة تحويل للنسخة المحسّنة على طول
-    if (currentUser.is_pro) {
+    if (currentUser?.is_pro) {
         showProRedirectModal();
     } else {
         showProPromoCard(); // مش مشترك؟ نعرضله بطاقة تعريفية بسيطة بميزات Pro (قابلة للإغلاق)
@@ -85,6 +80,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const res = await fetch('/api/analyze', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
+                credentials: 'same-origin',
                 body: JSON.stringify({ url, email: user?.email || null })
             });
 
@@ -92,14 +88,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (!res.ok || data.error) {
                 if (res.status === 429) {
-                    alert(data.error || 'وصلت للحد الأقصى من الفحوصات اليوم (3 فحوصات). حاول تاني بكرة.');
+                    renderUsageNotice({
+                        accountType: user?.email ? 'registered' : 'guest',
+                        limit: user?.email ? 6 : 3,
+                        remaining: 0,
+                        registrationPrompt: !user?.email ? 'سجّل حسابك للحصول على 6 فحوصات يومياً.' : null
+                    }, data.error || 'وصلت للحد الأقصى من الفحوصات المتاحة حالياً.');
                 } else {
-                    alert(data.error || 'حصل خطأ أثناء الفحص');
+                    showAnalyzerMessage(data.error || 'حصل خطأ أثناء الفحص', 'error');
                 }
                 return;
             }
 
             lastReport = data;
+            renderUsageNotice(data.usage);
             renderResults(data);
             results.style.display = 'block';
 
@@ -128,6 +130,52 @@ const SEVERITY_LABELS = {
 
 let currentFixes = [];
 let activeFilter = 'all';
+
+function showAnalyzerMessage(message, type = 'info') {
+    const notice = document.getElementById('usage-notice');
+    if (!notice) return;
+    notice.className = `usage-notice usage-notice--${type}`;
+    notice.style.display = 'block';
+    notice.textContent = message;
+}
+
+function renderUsageNotice(usage, fallbackMessage = '') {
+    const notice = document.getElementById('usage-notice');
+    if (!notice || !usage) return;
+
+    const isGuest = usage.accountType === 'guest';
+    const isPro = usage.accountType === 'pro';
+    const remaining = Number.isFinite(usage.remaining) ? usage.remaining : null;
+    const limit = Number.isFinite(usage.limit) ? usage.limit : null;
+    const reached = remaining === 0;
+    const parts = [];
+
+    if (fallbackMessage) parts.push(`<strong>${fallbackMessage}</strong>`);
+    if (reached) {
+        parts.push(isGuest
+            ? 'خلصت الفحوصات الثلاثة المجانية اليوم.'
+            : 'خلصت فحوصات اليوم المتاحة لحسابك.');
+    } else if (remaining !== null && limit !== null) {
+        parts.push(`متبقي لك <strong>${remaining}</strong> من <strong>${limit}</strong> فحوصات اليوم.`);
+    }
+
+    if (isGuest && !isPro) {
+        parts.push('<a href="register.html">سجّل للحصول على 6 فحوصات يومياً</a>');
+    } else if (isPro) {
+        parts.push('حساب Pro: الفحوصات متاحة بدون حد يومي.');
+    }
+
+    notice.className = `usage-notice ${reached ? 'usage-notice--limit' : 'usage-notice--info'}`;
+    notice.innerHTML = parts.join(' ');
+    notice.style.display = 'block';
+
+    const button = document.getElementById('analyze-btn');
+    const input = document.getElementById('analyze-url');
+    if (reached && button && input) {
+        button.disabled = true;
+        input.disabled = true;
+    }
+}
 
 function renderResults(data) {
     renderDevicePanel('mobile', data.mobile, data.safety);

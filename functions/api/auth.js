@@ -1,6 +1,13 @@
 /**
  * Cloudflare Pages Function: /api/auth
  */
+export function onRequestGet() {
+    return new Response(JSON.stringify({ error: 'استخدم POST لتنفيذ عملية المصادقة.' }), {
+        status: 405,
+        headers: { 'Content-Type': 'application/json', 'Allow': 'POST' }
+    });
+}
+
 export async function onRequestPost(context) {
     const { request, env } = context;
 

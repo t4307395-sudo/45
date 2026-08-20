@@ -73,7 +73,7 @@
                     </ul>
                 </div>
 
-                <!-- ============ فورم الفحص (يظهر بس لو مسجل دخول) ============ -->
+                <!-- ============ فورم الفحص: متاح للزائر وللمستخدم المسجل ============ -->
                 <section class="analyzer-input-section" id="analyzer-input-section">
                     <form id="analyze-form" class="analyzer-form">
                         <input
@@ -89,11 +89,8 @@
                     </form>
                 </section>
 
-                <!-- ============ رسالة تسجيل الدخول الإجباري ============ -->
-                <section class="login-required-box" id="login-required-box" style="display:none;">
-                    <p>لازم تسجّل دخول الأول عشان تقدر تستخدم الأداة</p>
-                    <a href="login.html" class="btn-primary">تسجيل الدخول</a>
-                </section>
+                <!-- ============ حالة الاستخدام ورسالة التسجيل الاختيارية ============ -->
+                <section class="usage-notice" id="usage-notice" aria-live="polite" style="display:none;"></section>
 
                 <!-- ============ حالة التحميل ============ -->
                 <div id="analyze-loading" class="analyzer-loading" style="display:none;">

@@ -2319,3 +2319,50 @@ a:hover {
         font-size: 0.75rem;
     }
 }
+
+
+/* حالة حد الفحوصات: التسجيل اختياري وليس بوابة إجبارية */
+.usage-notice {
+    margin: 1rem auto 0;
+    max-width: 760px;
+    padding: .85rem 1rem;
+    border: 1px solid rgba(124, 58, 237, .16);
+    border-radius: 14px;
+    background: rgba(124, 58, 237, .06);
+    color: #4c1d95;
+    text-align: center;
+    line-height: 1.8;
+}
+
+.usage-notice a {
+    color: #6d28d9;
+    font-weight: 700;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+}
+
+.usage-notice--limit {
+    border-color: rgba(220, 38, 38, .22);
+    background: rgba(220, 38, 38, .06);
+    color: #991b1b;
+}
+
+.usage-notice--error {
+    border-color: rgba(220, 38, 38, .22);
+    background: rgba(220, 38, 38, .06);
+    color: #991b1b;
+}
+
+.usage-notice strong {
+    font-weight: 800;
+}
+
+.analyzer-submit:disabled {
+    cursor: not-allowed;
+    opacity: .55;
+}
+
+.analyzer-input:disabled {
+    cursor: not-allowed;
+    opacity: .65;
+}
