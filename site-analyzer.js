@@ -225,7 +225,7 @@ function renderSeoDetails(seo) {
     ));
 
     if (seo.hasNoindex) {
-        items.push(seoItem('bad', 'noindex ⚠️', 'الصفحة دي متعلّم عليها بمنع الظهور في نتائج البحث نهائياً!'));
+        items.push(seoItem('bad',         'منع الفهرسة noindex ⚠️', 'الصفحة مفعّل عليها منع الظهور في نتائج البحث.'));
     }
 
     items.push(seoItem(
@@ -240,16 +240,16 @@ function renderSeoDetails(seo) {
         `${seo.imagesWithoutAlt} من ${seo.totalImages} صورة`
     ));
 
-    items.push(seoItem(seo.hasCanonical ? 'ok' : 'warn', 'Canonical Link', seo.hasCanonical ? 'موجود' : 'مفقود'));
-    items.push(seoItem(seo.hasSchema ? 'ok' : 'warn', 'Schema Markup', seo.hasSchema ? 'موجود' : 'مفقود'));
-    items.push(seoItem(seo.hasViewport ? 'ok' : 'bad', 'Viewport Meta', seo.hasViewport ? 'موجود' : 'مفقود'));
-    items.push(seoItem(seo.hasFavicon ? 'ok' : 'warn', 'Favicon', seo.hasFavicon ? 'موجود' : 'مفقود'));
+    items.push(seoItem(seo.hasCanonical ? 'ok' : 'warn', 'الرابط الأساسي Canonical', seo.hasCanonical ? 'موجود' : 'مفقود'));
+    items.push(seoItem(seo.hasSchema ? 'ok' : 'warn', 'بيانات Schema المنظمة', seo.hasSchema ? 'موجودة' : 'مفقودة'));
+    items.push(seoItem(seo.hasViewport ? 'ok' : 'bad', 'إعداد عرض الهاتف Viewport', seo.hasViewport ? 'موجود' : 'مفقود'));
+    items.push(seoItem(seo.hasFavicon ? 'ok' : 'warn', 'أيقونة الموقع Favicon', seo.hasFavicon ? 'موجودة' : 'مفقودة'));
 
     const ogCount = [seo.openGraph?.title, seo.openGraph?.description, seo.openGraph?.image].filter(Boolean).length;
-    items.push(seoItem(ogCount === 3 ? 'ok' : 'warn', 'Open Graph (مشاركة السوشيال)', `${ogCount}/3 وسوم موجودة`));
+    items.push(seoItem(ogCount === 3 ? 'ok' : 'warn', 'بيانات المشاركة Open Graph', `${ogCount}/3 وسوم موجودة`));
 
     items.push(seoItem('info', 'عدد الكلمات', `${seo.wordCount} كلمة تقريباً`));
-    items.push(seoItem('info', 'الروابط', `${seo.internalLinks} داخلي / ${seo.externalLinks} خارجي`));
+    items.push(seoItem('info', 'الروابط الداخلية والخارجية', `${seo.internalLinks} داخلي / ${seo.externalLinks} خارجي`));
 
     grid.innerHTML = items.join('');
     card.style.display = 'block';
@@ -273,9 +273,9 @@ function renderGeoDetails(geo) {
     items.push(seoItem(geo.hasRobotsTxt ? 'ok' : 'warn', 'ملف robots.txt', geo.hasRobotsTxt ? 'موجود' : 'مفقود'));
 
     if (geo.aiCrawlersBlocked?.length > 0) {
-        items.push(seoItem('bad', 'بوتات AI ممنوعة', geo.aiCrawlersBlocked.join(', ')));
+        items.push(seoItem('bad', 'بوتات الذكاء الاصطناعي الممنوعة', geo.aiCrawlersBlocked.join(', ')));
     } else {
-        items.push(seoItem('ok', 'بوتات AI', 'مفيش أي بوت ذكاء اصطناعي ممنوع'));
+        items.push(seoItem('ok', 'بوتات الذكاء الاصطناعي', 'لا يوجد بوت ذكاء اصطناعي ممنوع'));
     }
 
     grid.innerHTML = items.join('');

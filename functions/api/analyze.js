@@ -369,6 +369,7 @@ export async function fetchPageSpeed(url, apiKey, strategy) {
         `?url=${encodeURIComponent(url)}` +
         `&key=${apiKey}` +
         `&strategy=${strategy}` +
+        `&locale=ar` +
         `&category=performance&category=seo&category=accessibility`;
 
     const res = await fetch(endpoint);
@@ -1090,16 +1091,42 @@ export async function getStartIndex(env, totalKeys, counterId) {
 // كل عنصر جاي مباشرة من audits (PageSpeed الحقيقي أو فحوصاتنا الخاصة)،
 // فمفيش أي احتمال "اختراع" مشكلة مش موجودة فعلياً
 // ============================================================
+const AUDIT_ARABIC_FALLBACKS = {
+    'render-blocking-resources': ['موارد تمنع العرض', 'هناك ملفات CSS أو JavaScript تؤخر ظهور المحتوى الأول.'],
+    'unused-javascript': ['JavaScript غير مستخدم', 'يوجد كود JavaScript يتم تحميله ولا يُستخدم في الصفحة الحالية.'],
+    'unused-css-rules': ['CSS غير مستخدم', 'يوجد تنسيقات CSS غير مستخدمة يمكن حذفها أو تحميلها عند الحاجة.'],
+    'unminified-css': ['ملفات CSS غير مضغوطة', 'ضغط ملفات CSS يقلل حجم التحميل ويحسن سرعة الصفحة.'],
+    'unminified-javascript': ['ملفات JavaScript غير مضغوطة', 'ضغط ملفات JavaScript يقلل حجم التحميل ويحسن سرعة الصفحة.'],
+    'uses-optimized-images': ['الصور تحتاج تحسينًا', 'بعض الصور يمكن ضغطها أو تحويلها إلى صيغة أحدث لتقليل حجم التحميل.'],
+    'uses-responsive-images': ['الصور غير متجاوبة', 'يفضل تقديم مقاس الصورة المناسب لكل شاشة بدل تحميل صورة كبيرة للجميع.'],
+    'offscreen-images': ['صور خارج الشاشة تُحمّل مبكرًا', 'استخدم التحميل الكسول للصور التي لا تظهر في بداية الصفحة.'],
+    'image-size-responsive': ['أبعاد الصور تحتاج ضبطًا', 'تأكد من تحديد أبعاد الصور لتجنب تحرك المحتوى أثناء التحميل.'],
+    'meta-description': ['وصف Meta يحتاج مراجعة', 'أضف وصفًا واضحًا ومختصرًا للصفحة لتحسين ظهورها في نتائج البحث.'],
+    'document-title': ['عنوان الصفحة يحتاج مراجعة', 'أضف عنوانًا وصفيًا وفريدًا للصفحة.'],
+    'link-text': ['نصوص الروابط غير واضحة', 'استخدم نصًا يشرح وجهة الرابط بدل عبارات عامة مثل اضغط هنا.'],
+    'crawlable-anchors': ['بعض الروابط قد لا تكون قابلة للزحف', 'تأكد من أن الروابط تستخدم عناصر a مع href صالح.'],
+    'robots-txt': ['ملف robots.txt يحتاج مراجعة', 'تأكد من وجود ملف robots.txt صالح ولا يمنع محركات البحث من الصفحات المهمة.'],
+    'http-status-code': ['رموز استجابة HTTP تحتاج مراجعة', 'تأكد من أن الموارد والصفحات المهمة تعيد رمز HTTP صحيحًا.'],
+    'font-display': ['خطوط الويب تؤخر العرض', 'استخدم font-display مناسبًا حتى لا يختفي النص أثناء تحميل الخطوط.'],
+    'color-contrast': ['تباين الألوان ضعيف', 'حسّن التباين بين النص والخلفية لتسهيل القراءة وإمكانية الوصول.'],
+    'image-alt': ['صور بدون نص بديل', 'أضف نصًا بديلًا وصفيًا للصور المهمة لمستخدمي قارئات الشاشة.'],
+    'viewport': ['إعداد Viewport يحتاج مراجعة', 'أضف إعداد viewport مناسبًا لضمان عرض الصفحة على الشاشات المختلفة.'],
+    'heading-order': ['ترتيب العناوين يحتاج مراجعة', 'استخدم مستويات العناوين بترتيب منطقي من H1 إلى العناوين الفرعية.']
+};
+
 function buildIssuesList(audits) {
-    return audits.map(a => ({
-        id: a.id || `${a.device || 'issue'}-${(a.title || '').slice(0, 30)}`,
-        device: a.device || null,
-        title: a.title,
-        description: a.description || null,
-        severity: deriveSeverity(a),
-        // الحل (steps + codeExample) هيتولّد عند الطلب بس، لما المستخدم يدوس "حل المشكلة"
-        hasSolution: false
-    }));
+    return audits.map(a => {
+        const fallback = AUDIT_ARABIC_FALLBACKS[a.id];
+        return {
+            id: a.id || `${a.device || 'issue'}-${(a.title || '').slice(0, 30)}`,
+            device: a.device || null,
+            title: fallback?.[0] || a.title,
+            description: fallback?.[1] || a.description || null,
+            severity: deriveSeverity(a),
+            // الحل (steps + codeExample) هيتولّد عند الطلب بس، لما المستخدم يدوس "حل المشكلة"
+            hasSolution: false
+        };
+    });
 }
 
 function deriveSeverity(audit) {
