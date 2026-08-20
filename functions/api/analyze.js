@@ -342,17 +342,22 @@ function scoreToPercent(score) {
 }
 
 function buildDataQuality(results) {
-    const checks = Object.fromEntries(Object.entries(results).map(([name, result]) => [
-        name,
-        result.status === 'fulfilled'
-            ? { status: 'ok' }
-            : { status: 'unavailable', reason: result.reason?.message || 'مصدر البيانات لم يستجب' }
-    ]));
-    const unavailable = Object.entries(checks).filter(([, value]) => value.status !== 'ok');
+    const required = new Set(['mobileResult', 'desktopResult', 'securityAuditResult', 'pageContent']);
+    const checks = Object.fromEntries(Object.entries(results).map(([name, result]) => {
+        if (result.status !== 'fulfilled') {
+            return [name, { status: 'unavailable', reason: result.reason?.message || 'مصدر البيانات لم يستجب' }];
+        }
+        if (result.value == null) {
+            return [name, { status: 'no-data', reason: required.has(name) ? 'لم تصل بيانات كافية من المصدر' : 'لا توجد بيانات كافية لهذا الرابط' }];
+        }
+        return [name, { status: 'ok' }];
+    }));
+    const requiredProblems = Object.entries(checks).filter(([name, value]) => required.has(name) && value.status !== 'ok');
+    const allProblems = Object.entries(checks).filter(([, value]) => value.status !== 'ok');
     return {
-        complete: unavailable.length === 0,
+        complete: requiredProblems.length === 0,
         checks,
-        warnings: unavailable.map(([name, value]) => `${name}: ${value.reason}`)
+        warnings: allProblems.map(([name, value]) => `${name}: ${value.reason}`)
     };
 }
 
