@@ -525,7 +525,7 @@ function renderFixes() {
                     </div>
 
                     <div id="${solutionBoxId}" class="fix-solution-box">
-                        <button type="button" class="solve-issue-btn" data-index="${index}">🔧 حل المشكلة</button>
+                        ${renderFixSolution(fix, index)}
                     </div>
                 </div>
             </div>
@@ -533,7 +533,25 @@ function renderFixes() {
     }).join('');
 
     setupCopyButtons();
-    setupSolveButtons(visibleFixes);
+}
+
+function renderFixSolution(fix, index) {
+    if (fix.solution) {
+        const steps = Array.isArray(fix.solution.steps) ? fix.solution.steps : [];
+        return `
+            <div class="fix-solution-content">
+                <h5>الحل المقترح</h5>
+                ${steps.length ? `<ol>${steps.map(step => `<li>${escapeHtml(step)}</li>`).join('')}</ol>` : '<p>لا توجد خطوات آمنة كافية لهذه المشكلة.</p>'}
+                ${fix.solution.codeExample ? `<pre class="result-code result-code--block"><code>${escapeHtml(fix.solution.codeExample)}</code></pre>` : ''}
+            </div>
+        `;
+    }
+
+    if (index < 4) {
+        return '<p class="fix-solution-pending">سيظهر الحل العربي مع أول أربع مشاكل عند اكتمال التقرير.</p>';
+    }
+
+    return '<p class="fix-solution-pending">المشكلة مترجمة من نتيجة الفحص الفعلية. الحلول التفصيلية متاحة لأول أربع مشاكل فقط.</p>';
 }
 
 // ============================================================

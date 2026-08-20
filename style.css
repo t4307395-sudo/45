@@ -2366,3 +2366,34 @@ a:hover {
     cursor: not-allowed;
     opacity: .65;
 }
+
+
+.fix-solution-content {
+    margin-top: .75rem;
+    padding-top: .75rem;
+    border-top: 1px solid rgba(124, 58, 237, .12);
+}
+
+.fix-solution-content h5 {
+    margin: 0 0 .5rem;
+    color: #5b21b6;
+    font-size: .95rem;
+}
+
+.fix-solution-content ol {
+    margin: 0;
+    padding-inline-start: 1.4rem;
+    line-height: 1.85;
+}
+
+.fix-solution-content .result-code {
+    margin-top: .75rem;
+    direction: ltr;
+    text-align: left;
+}
+
+.fix-solution-pending {
+    margin: .5rem 0 0;
+    color: #6b7280;
+    font-size: .9rem;
+}

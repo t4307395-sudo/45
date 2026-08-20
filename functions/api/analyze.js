@@ -1145,22 +1145,38 @@ function deriveSeverity(audit) {
 // ============================================================
 async function generateAIRecommendations(env, url, audits, safety, seo, realUserData, isPro) {
     const fixes = buildIssuesList(audits);
+    const solutionTargets = fixes.slice(0, 4).map((fix, index) => ({
+        index,
+        title: fix.title,
+        description: fix.description,
+        device: fix.device
+    }));
 
     const keys = getGeminiKeys(env, isPro);
     if (keys.length === 0) {
         return { fixes, suggestedMetaDescription: null, schemaMarkup: null, keyUsed: null };
     }
 
-    // برومبت خفيف جداً بس لوصف Meta وSchema (مش لتوليد مشاكل خالص، عشان كده مفيش خطر اختراع)
+    // استدعاء واحد فقط: يكتب حلول أول أربع مشاكل بالعربي، ولا يضيف مشاكل جديدة.
     const prompt = `
-أنت خبير SEO. بناءً على البيانات دي عن موقع ${url}:
+أنت مهندس ويب وخبير SEO. كل البيانات التالية ناتجة عن فحص حقيقي لموقع ${url}.
+مهمتك أن تكتب حلولًا عملية باللغة العربية لأول أربع مشاكل فقط، ولا تخترع أي مشكلة جديدة.
+
+المشاكل التي لها حلول:
+${JSON.stringify(solutionTargets)}
+
+بيانات SEO:
 ${seo ? JSON.stringify(seo) : 'غير متاحة'}
 
-رجّع بصيغة JSON فقط، من غير أي نص زيادة أو backticks:
+أعد JSON فقط من غير أي نص خارج JSON أو backticks:
 {
-  "suggestedMetaDescription": "وصف Meta بالعربي جاهز (155 حرف تقريباً) لو ناقص أو قصير، أو null لو موجود وكويس فعلاً",
-  "schemaMarkup": "كود Schema Markup (JSON-LD نوع WebPage) جاهز للنسخ"
+  "solutions": [
+    { "index": 0, "steps": ["خطوة عملية قصيرة بالعربية"], "codeExample": "كود جاهز للنسخ أو null" }
+  ],
+  "suggestedMetaDescription": "وصف Meta عربي جاهز أو null",
+  "schemaMarkup": "كود Schema Markup JSON-LD جاهز للنسخ أو null"
 }
+قواعد مهمة: أعد عنصر solution لكل مشكلة موجودة فقط، اجعل الخطوات بالعربية، لا تكتب حلولًا للمشاكل بعد أول أربع مشاكل، ولا تضع كودًا إلا إذا كان مناسبًا فعلًا للمشكلة.
 `.trim();
 
     const startIndex = await getStartIndex(env, keys.length, isPro ? 2 : 1);
@@ -1169,8 +1185,15 @@ ${seo ? JSON.stringify(seo) : 'غير متاحة'}
         const keyEntry = keys[(startIndex + attempt) % keys.length];
         try {
             const raw = await callGemini(keyEntry.key, prompt);
+            const solutions = Array.isArray(raw.solutions) ? raw.solutions : [];
+            const fixesWithSolutions = fixes.map((fix, index) => {
+                const solution = index < 4 ? solutions.find(item => Number(item?.index) === index) : null;
+                return solution
+                    ? { ...fix, solution: normalizeSolution(solution) }
+                    : fix;
+            });
             return {
-                fixes,
+                fixes: fixesWithSolutions,
                 suggestedMetaDescription: raw.suggestedMetaDescription || null,
                 schemaMarkup: raw.schemaMarkup || null,
                 keyUsed: keyEntry.index
@@ -1183,6 +1206,17 @@ ${seo ? JSON.stringify(seo) : 'غير متاحة'}
 
     // حتى لو فشل جزء الـ Meta/Schema، قائمة المشاكل الحقيقية (fixes) لازم تفضل موجودة دايمًا
     return { fixes, suggestedMetaDescription: null, schemaMarkup: null, keyUsed: null };
+}
+
+function normalizeSolution(solution) {
+    return {
+        steps: Array.isArray(solution.steps)
+            ? solution.steps.filter(step => typeof step === 'string').slice(0, 8)
+            : [],
+        codeExample: typeof solution.codeExample === 'string' && solution.codeExample.trim()
+            ? solution.codeExample
+            : null
+    };
 }
 
 export async function callGemini(apiKey, prompt) {
