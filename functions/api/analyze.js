@@ -79,7 +79,7 @@ export async function onRequestPost(context) {
         const dataQuality = buildDataQuality({ mobileResult, desktopResult, safeBrowsingResult, securityAuditResult, pageContent, cruxResult, geoResult });
 
         if (!mobile && !desktop) {
-            return jsonError('لم نتمكن من الحصول على قياسات السرعة من PageSpeed لهذا الرابط. جرّب مرة أخرى أو تأكد أن الموقع متاح للعامة.', 502);
+            return jsonError('لم نتمكن من الحصول على قياسات الأداء الأساسية لهذا الرابط. جرّب مرة أخرى أو تأكد أن الموقع متاح للعامة.', 502);
         }
 
         // دمج فحص "الموقع مصنّف كخبيث؟" مع فحص "إعدادات الأمان الفعلية" في كيان واحد
@@ -341,6 +341,18 @@ function scoreToPercent(score) {
         : null;
 }
 
+function formatCheckName(name) {
+    return {
+        mobileResult: 'فحص الهاتف',
+        desktopResult: 'فحص الكمبيوتر',
+        safeBrowsingResult: 'فحص السلامة',
+        securityAuditResult: 'فحص إعدادات الأمان',
+        pageContent: 'تحليل محتوى الصفحة',
+        cruxResult: 'بيانات الاستخدام الحقيقي',
+        geoResult: 'الفحص الجغرافي'
+    }[name] || 'مصدر بيانات';
+}
+
 function buildDataQuality(results) {
     const required = new Set(['mobileResult', 'desktopResult', 'securityAuditResult', 'pageContent']);
     const checks = Object.fromEntries(Object.entries(results).map(([name, result]) => {
@@ -357,7 +369,7 @@ function buildDataQuality(results) {
     return {
         complete: requiredProblems.length === 0,
         checks,
-        warnings: allProblems.map(([name, value]) => `${name}: ${value.reason}`)
+        warnings: allProblems.map(([name, value]) => `${formatCheckName(name)}: ${value.reason}`)
     };
 }
 
@@ -1115,19 +1127,31 @@ const AUDIT_ARABIC_FALLBACKS = {
 };
 
 function buildIssuesList(audits) {
-    return audits.map(a => {
-        const fallback = AUDIT_ARABIC_FALLBACKS[a.id];
-        return {
-            id: a.id || `${a.device || 'issue'}-${(a.title || '').slice(0, 30)}`,
-            device: a.device || null,
-            title: fallback?.[0] || a.title,
-            description: fallback?.[1] || a.description || null,
-            severity: deriveSeverity(a),
-            // الحل (steps + codeExample) هيتولّد عند الطلب بس، لما المستخدم يدوس "حل المشكلة"
-            hasSolution: false
-        };
-    });
+    return audits
+        .map(a => {
+            const severity = deriveSeverity(a);
+            const fallback = AUDIT_ARABIC_FALLBACKS[a.id];
+            return {
+                id: a.id || `${a.device || 'issue'}-${(a.title || '').slice(0, 30)}`,
+                device: a.device || null,
+                title: fallback?.[0] || a.title,
+                description: fallback?.[1] || a.description || null,
+                severity,
+                score: typeof a.score === 'number' ? a.score : null,
+                // الحل (steps + codeExample) هيتولّد عند الطلب بس، لأول أربع مشاكل بعد الترتيب
+                hasSolution: false
+            };
+        })
+        .sort((a, b) => {
+            const severityDifference = SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity];
+            if (severityDifference !== 0) return severityDifference;
+            // داخل نفس المستوى: الأسوأ أولًا، ثم ترتيب ثابت بالعنوان.
+            if (a.score !== null && b.score !== null && a.score !== b.score) return a.score - b.score;
+            return (a.title || '').localeCompare(b.title || '', 'ar');
+        });
 }
+
+const SEVERITY_RANK = { critical: 0, high: 1, medium: 2, low: 3 };
 
 function deriveSeverity(audit) {
     // مشاكل الأمان (device: 'security') والملفات الحساسة دايمًا حرجة
